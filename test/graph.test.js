@@ -231,6 +231,32 @@ describe('layout', () => {
       ]);
     });
 
+    /**
+     * With one uniform gap, one couple's children sat exactly as far from each
+     * other as from the next family's, so there was no way to see where a set
+     * of siblings ended.
+     */
+    it('separates families more than it separates couples', () => {
+      const { father, data } = threeMarriedChildren();
+      const g = buildIndexes(data);
+
+      const spacers = buildLayout(g, father.id, { up: 0, down: 1 })
+        .rows.find((row) => row.level === 1)
+        .nodes.filter((node) => node.type === NodeType.SPACER);
+
+      // All three children share parents, so every gap here is a couple gap.
+      expect(spacers.map((s) => s.size)).to.eql(['couple', 'couple']);
+    });
+
+    it('does not leave a trailing spacer at the end of a row', () => {
+      const { father, data } = threeMarriedChildren();
+      const g = buildIndexes(data);
+
+      for (const row of buildLayout(g, father.id, { up: 0, down: 1 }).rows) {
+        expect(row.nodes[row.nodes.length - 1].type).to.not.equal(NodeType.SPACER);
+      }
+    });
+
     // The sibling comes first in the pair, not the person who married in.
     it('puts the blood relative on the side facing their siblings', () => {
       const { father, children, data } = threeMarriedChildren();
@@ -240,6 +266,29 @@ describe('layout', () => {
       for (const child of children) {
         expect(order.indexOf(child.id) % 2).to.equal(0, `${child.firstName} leads its pair`);
       }
+    });
+
+    /**
+     * The focal row cannot be oriented by position, because the row above has
+     * not been placed yet. Without a rule of its own, the focal person's
+     * spouse sat between them and their siblings and the bar joining the
+     * siblings had to reach over her.
+     */
+    it('puts the focal person ahead of their own spouse', () => {
+      const { children, spouses, data } = threeMarriedChildren();
+      const focal = children[1];
+
+      const g = buildIndexes(data);
+      const order = rowOf(buildLayout(g, focal.id, { up: 1, down: 0 }), 0);
+
+      expect(order.indexOf(focal.id)).to.be.below(order.indexOf(spouses[1].id));
+
+      // And the siblings are still there, in birth order, after the pair.
+      expect(order.filter((id) => children.some((c) => c.id === id))).to.eql([
+        children[0].id,
+        children[1].id,
+        children[2].id,
+      ]);
     });
   });
 });

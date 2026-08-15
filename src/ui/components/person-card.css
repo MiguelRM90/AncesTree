@@ -23,9 +23,35 @@ person-photo { grid-row: 1 / span 2; --photo-size: 2.5rem; }
    is what makes the ellipsis work inside a grid. */
 .name, .dates { grid-column: 2; }
 
+/**
+ * The centred person has to be unmistakable at a glance.
+ *
+ * Clicking between siblings rebuilds a row that looks almost identical — the
+ * same brothers and sisters, just a different one at the centre — so a thin
+ * accent border was not enough to keep track of where you were.
+ */
 :host([focal]) button {
   border-color: var(--c-accent);
+  border-width: 2px;
+  padding: calc(var(--s-3) - 1px);
+  background: var(--c-accent-soft);
+  box-shadow: 0 0 0 3px var(--c-accent-soft), var(--shadow);
+}
+
+:host([focal]) .dates {
+  color: var(--c-text);
+}
+
+/* The parents of whoever is being pointed at. */
+:host([related]) button {
+  border-color: var(--c-accent);
   box-shadow: 0 0 0 2px var(--c-accent-soft), var(--shadow);
+}
+
+@media (forced-colors: active) {
+  :host([focal]) button {
+    border-color: Highlight;
+  }
 }
 
 /* Placeholder people are drawn differently and can be materialised */

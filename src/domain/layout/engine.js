@@ -54,7 +54,7 @@ export function buildLayout(g, focalId, { up = 4, down = 4 } = {}) {
     grouped.map(([level, ids]) => [level, buildBlocks(g, new Set(ids))]),
   );
 
-  const ordered = orderRows(g, blocksByLevel);
+  const ordered = orderRows(g, blocksByLevel, levels);
 
   return { ...emit(g, ordered, visible), levels };
 }
@@ -105,9 +105,15 @@ function buildBlocks(g, ids) {
  * the position of their children. Both directions radiate outwards from the
  * focal row, which is what makes a pedigree read correctly.
  */
-function orderRows(g, blocksByLevel) {
+function orderRows(g, blocksByLevel, levels) {
   const position = new Map();
   const result = new Map();
+
+  /** The leading member decides where the block sorts, so birth follows it. */
+  const withLead = (block) => ({
+    ...block,
+    birth: g.persons.get(block.members[0])?.birth?.date?.earliest ?? null,
+  });
 
   const commit = (level, blocks) => {
     result.set(level, blocks);
@@ -136,21 +142,25 @@ function orderRows(g, blocksByLevel) {
    * Otherwise the married-in spouse sits between their partner and their
    * partner's siblings, stretching the bar that joins them for no reason.
    */
-  const orient = (block, linksOf, endOf) => {
+  const orient = (block, rank) => {
     if (block.members.length !== 2) return block;
 
     const [first, second] = block.members;
-    if (anchorOfPerson(first, linksOf, endOf) <= anchorOfPerson(second, linksOf, endOf)) {
-      return block;
-    }
+    if (rank(first) <= rank(second)) return block;
 
-    return { ...block, members: [second, first], items: [...block.items].reverse() };
+    return withLead({ ...block, members: [second, first], items: [...block.items].reverse() });
   };
 
+  /**
+   * `group` records which family a block belongs to — the position of the
+   * relatives it hangs from. Blocks sharing it are siblings, and the renderer
+   * uses it to put real space between one set of children and the next.
+   */
   const sortBy = (blocks, linksOf, endOf) =>
     [...blocks]
-      .map((block) => orient(block, linksOf, endOf))
-      .sort((a, b) => anchorOf(a, linksOf, endOf) - anchorOf(b, linksOf, endOf) || compareBirth(a, b));
+      .map((block) => orient(block, (id) => anchorOfPerson(id, linksOf, endOf)))
+      .map((block) => ({ ...block, group: anchorOf(block, linksOf, endOf) }))
+      .sort((a, b) => a.group - b.group || compareBirth(a, b));
 
   const present = [...blocksByLevel.keys()].sort((a, b) => a - b);
   const lowest = present[0];
@@ -159,8 +169,26 @@ function orderRows(g, blocksByLevel) {
   const toParents = [parentLinksOf, (link) => link.parentId];
   const toChildren = [childLinksOf, (link) => link.childId];
 
-  // The focal row anchors nothing: it is the row everything else radiates from.
-  commit(0, [...(blocksByLevel.get(0) ?? [])].sort(compareBirth));
+  /**
+   * The focal row anchors nothing — it is the row everything else radiates
+   * from — so it cannot be oriented by position: the row above has not been
+   * placed yet. Blood relation is enough here, and needs no positions: whoever
+   * has a parent on screen is the sibling, and the sibling leads the pair.
+   *
+   * Without this the focal person's spouse sat between them and their
+   * brothers and sisters, and the bar joining the siblings had to reach over
+   * her.
+   */
+  const isBloodRelative = (personId) =>
+    parentLinksOf(g, personId).some((link) => levels.has(link.parentId)) ? 0 : 1;
+
+  commit(
+    0,
+    [...(blocksByLevel.get(0) ?? [])]
+      .map((block) => orient(block, isBloodRelative))
+      .sort(compareBirth)
+      .map((block) => ({ ...block, group: 0 })),
+  );
 
   for (let level = 1; level <= highest; level += 1) {
     const blocks = blocksByLevel.get(level);
@@ -191,7 +219,7 @@ function emit(g, ordered, visible) {
   for (const [level, blocks] of ordered) {
     const nodes = [];
 
-    for (const block of blocks) {
+    for (const [index, block] of blocks.entries()) {
       for (const item of block.items) {
         nodes.push({
           type: item.type,
@@ -215,11 +243,22 @@ function emit(g, ordered, visible) {
         }
       }
 
-      // Separator between family branches: an empty, invisible element that
-      // reserves space to avoid overlap and keep the layout symmetric. NOT to
-      // be confused with the model's placeholder people — this is purely
-      // visual.
-      nodes.push({ type: NodeType.SPACER, id: `s:${block.members[0]}`, level });
+      // Separator: an empty, invisible element reserving space. NOT to be
+      // confused with the model's placeholder people — this is purely visual.
+      //
+      // A wide one goes between families and a narrow one between couples of
+      // the same family. With a single uniform gap, one couple's children sat
+      // exactly as far from each other as from the neighbouring family's, so
+      // there was no way to see where one set of siblings ended.
+      const next = blocks[index + 1];
+      if (!next) continue;
+
+      nodes.push({
+        type: NodeType.SPACER,
+        id: `s:${block.members[0]}`,
+        level,
+        size: next.group === block.group ? 'couple' : 'family',
+      });
     }
 
     rows.push({ level, nodes });

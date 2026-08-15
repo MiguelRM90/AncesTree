@@ -18,6 +18,7 @@ import './tree-canvas.js';
 import './person-editor.js';
 import './import-dialog.js';
 import './app-notice.js';
+import './person-search.js';
 
 const styles = sheet(css);
 
@@ -29,6 +30,7 @@ export class AppRoot extends HTMLElement {
   #buttons = {};
   #depth = {};
   #focal;
+  #search;
   #tree = null;
   #editor = null;
   #importer = null;
@@ -49,6 +51,7 @@ export class AppRoot extends HTMLElement {
 
     // Says who the tree is centred on, so re-rooting stops looking arbitrary.
     this.#focal = el('span', { class: 'focal' });
+    this.#search = document.createElement('person-search');
 
     this.#main = el('main');
     this.#notices = document.createElement('app-notice');
@@ -57,7 +60,7 @@ export class AppRoot extends HTMLElement {
   }
 
   connectedCallback() {
-    for (const type of ['open', 'close', 'change']) {
+    for (const type of ['open', 'close', 'change', 'trail']) {
       store.addEventListener(type, this.#render);
     }
     store.addEventListener('saving', this.#onSaving);
@@ -78,7 +81,7 @@ export class AppRoot extends HTMLElement {
   }
 
   disconnectedCallback() {
-    for (const type of ['open', 'close', 'change']) {
+    for (const type of ['open', 'close', 'change', 'trail']) {
       store.removeEventListener(type, this.#render);
     }
     store.removeEventListener('saving', this.#onSaving);
@@ -115,6 +118,7 @@ export class AppRoot extends HTMLElement {
       class: 'actions-inline',
       attrs: { role: 'toolbar', 'aria-label': S.a11y.toolbar },
       children: [
+        make('back', S.toolbar.back, () => store.goBack()),
         make('edit', S.toolbar.edit, () => this.#editFocal()),
         el('div', { class: 'divider' }),
         make('addParent', S.toolbar.addParent, () => this.#add(actions.addParentFor)),
@@ -126,17 +130,21 @@ export class AppRoot extends HTMLElement {
         el('div', { class: 'divider' }),
         make('export', S.toolbar.exportZip, () => this.#exportArchive()),
         make('import', S.toolbar.importZip, () => this.#startImport()),
+        make('gedcom', S.toolbar.exportGedcom, () => this.#exportGedcom()),
         el('div', { class: 'divider' }),
         this.#depthPicker('up', S.toolbar.ancestors, S.toolbar.generationsUp),
         this.#depthPicker('down', S.toolbar.descendants, S.toolbar.generationsDown),
       ],
     });
 
+    this.#buttons.back.title = S.toolbar.backTo;
+
     return el('header', {
       children: [
         el('h1', { text: S.app.name }),
         this.#toolbar,
         el('div', { class: 'spacer' }),
+        this.#search,
         this.#focal,
         this.#status,
       ],
@@ -165,8 +173,11 @@ export class AppRoot extends HTMLElement {
     const open = store.isOpen && store.focalPersonId !== null;
     this.#toolbar.hidden = !open;
     this.#focal.hidden = !open;
+    this.#search.hidden = !open;
     if (!open) return;
 
+    this.#search.graph = store.graph;
+    this.#buttons.back.disabled = !store.canGoBack;
     this.#buttons.undo.disabled = !store.canUndo;
     this.#buttons.redo.disabled = !store.canRedo;
 
@@ -341,6 +352,21 @@ export class AppRoot extends HTMLElement {
       else if (result.ok) {
         this.#notices.show({ severity: 'success', title: S.archive.exported(result.entries) });
       }
+    });
+  }
+
+  #exportGedcom() {
+    void this.#guarded(async () => {
+      const result = await actions.exportGedcom();
+      if (result.cancelled || !result.ok) return;
+
+      // The lossiness is stated every time rather than buried in a document:
+      // someone exporting a GEDCOM is about to hand it to another application.
+      this.#notices.show({
+        severity: 'success',
+        title: S.archive.gedcomWritten(result.persons),
+        detail: S.archive.gedcomLossy,
+      });
     });
   }
 

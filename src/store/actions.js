@@ -18,6 +18,7 @@ import {
 } from '../storage/handles.js';
 import {
   exportProject,
+  exportGedcomFile,
   pickArchive,
   inspectArchive,
   importAsNewProject,
@@ -100,6 +101,17 @@ export async function lastProjectSummary() {
 export function exportArchive() {
   if (!store.isOpen) return Promise.resolve({ ok: false, reason: 'none' });
   return exportProject(store.directoryHandle, store.project);
+}
+
+/**
+ * Exports a GEDCOM for other genealogy software.
+ *
+ * A projection of the project, not a copy of it: the format cannot hold
+ * everything the model does (gedcom-mapping.md). The ZIP is the faithful copy.
+ */
+export function exportGedcom() {
+  if (!store.isOpen) return Promise.resolve({ ok: false, reason: 'none' });
+  return exportGedcomFile(store.project);
 }
 
 /**

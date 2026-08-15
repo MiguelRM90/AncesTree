@@ -5,7 +5,23 @@ dialog {
   color: var(--c-text);
   padding: 0;
   width: min(28rem, 90vw);
+  max-height: min(90vh, 100%);
   box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.body {
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+
+footer {
+  flex: 0 0 auto;
 }
 dialog::backdrop { background: rgb(0 0 0 / 35%); }
 

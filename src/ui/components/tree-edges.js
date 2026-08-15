@@ -15,6 +15,7 @@
  */
 
 import { svg, clear } from '../dom.js';
+import { partnerPath, descentPaths } from '../edge-paths.js';
 import { base, sheet } from '../styles/sheets.js';
 import css from './tree-edges.css?inline';
 
@@ -54,6 +55,7 @@ export class TreeEdges extends HTMLElement {
     for (const node of container.querySelectorAll('[data-node-id]')) {
       const rect = node.getBoundingClientRect();
       centres.set(node.dataset.nodeId, {
+        nodeId: node.dataset.nodeId,
         cx: rect.left - bounds.left + rect.width / 2,
         top: rect.top - bounds.top,
         bottom: rect.bottom - bounds.top,
@@ -67,32 +69,57 @@ export class TreeEdges extends HTMLElement {
     clear(this.#svg);
 
     for (const edge of edges) {
+      if (edge.kind !== 'partner') continue;
+
       const from = centres.get(edge.fromNodeId);
       const to = centres.get(edge.toNodeId);
       if (!from || !to) continue;
 
       this.#svg.append(
+        svg('path', { d: partnerPath(from, to), class: 'partner', 'data-edge-id': edge.id }),
+      );
+    }
+
+    for (const path of descentPaths(edges, centres)) {
+      this.#svg.append(
         svg('path', {
-          d: edge.kind === 'partner' ? partnerPath(from, to) : descentPath(from, to),
-          class: edge.kind,
-          'data-edge-id': edge.id,
+          d: path.d,
+          class: 'descent',
+          'data-edge-id': path.id,
+          'data-children': path.children.join(' '),
         }),
       );
     }
   }
+
+  /**
+   * Lights up one family's lines.
+   *
+   * With several families sharing a row, tracing a line by eye to find out
+   * whose child someone is takes real effort. Pointing at them should answer
+   * it.
+   *
+   * @param {string|null} nodeId  a person, whose bar is lit, or a union node,
+   *   whose own bar is lit
+   * @param {{pinned?: boolean}} [options]
+   * @returns {string[]} the node ids the lit bar descends from
+   */
+  highlight(nodeId, { pinned = false } = {}) {
+    let source = [];
+
+    for (const path of this.#svg.querySelectorAll('path.descent')) {
+      const from = path.dataset.edgeId.replace(/^descent:/, '');
+      const owns =
+        nodeId !== null && (from === nodeId || path.dataset.children.split(' ').includes(nodeId));
+
+      path.classList.toggle('lit', owns);
+      path.classList.toggle('pinned', owns && pinned);
+      if (owns) source = [from];
+    }
+
+    return source;
+  }
 }
 
-/** Horizontal run between the card and the union node, at the same height. */
-function partnerPath(from, to) {
-  const y = (from.top + from.bottom) / 2;
-  const x1 = from.cx < to.cx ? from.right : from.left;
-  return `M ${x1} ${y} L ${to.cx} ${y}`;
-}
-
-/** Orthogonal route: down, turn at the midpoint, down again. */
-function descentPath(from, to) {
-  const midY = from.bottom + (to.top - from.bottom) / 2;
-  return `M ${from.cx} ${from.bottom} V ${midY} H ${to.cx} V ${to.top}`;
-}
 
 customElements.define('tree-edges', TreeEdges);

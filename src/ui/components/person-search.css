@@ -1,0 +1,82 @@
+:host {
+  position: relative;
+  display: block;
+  min-width: 14rem;
+}
+
+input {
+  font: inherit;
+  width: 100%;
+  color: var(--c-text);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  padding: var(--s-2) var(--s-3);
+}
+
+input::placeholder {
+  color: var(--c-text-muted);
+}
+
+/* Above the tree, and out of the flow so opening it never moves the header. */
+.results {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + var(--s-1));
+  left: 0;
+  right: 0;
+  max-height: 60vh;
+  overflow-y: auto;
+  margin: 0;
+  padding: var(--s-1);
+  list-style: none;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.results[hidden] {
+  display: none;
+}
+
+li {
+  border-radius: var(--radius-sm);
+}
+
+li button {
+  display: grid;
+  gap: 0;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: none;
+  padding: var(--s-2);
+}
+
+li button:hover,
+li[aria-selected='true'] button {
+  background: var(--c-accent-soft);
+  border: 0;
+}
+
+.name {
+  font-weight: 600;
+}
+
+.dates {
+  font-size: var(--fs-sm);
+  color: var(--c-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+li[data-placeholder] .name {
+  color: var(--c-text-muted);
+  font-style: italic;
+}
+
+.empty {
+  padding: var(--s-2);
+  font-size: var(--fs-sm);
+  color: var(--c-text-muted);
+}

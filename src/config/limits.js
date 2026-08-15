@@ -34,4 +34,8 @@ export const CONSANGUINITY_MAX_DEPTH = 8;
 export const DEFAULT_GENERATIONS_UP = 4;
 export const DEFAULT_GENERATIONS_DOWN = 4;
 export const UNDO_STACK_SIZE = 50;
+/** How many people back the "previous person" button can walk. */
+export const TRAIL_LENGTH = 50;
+export const SEARCH_RESULTS = 20;
+export const SEARCH_DEBOUNCE_MS = 120;
 export const RESIZE_DEBOUNCE_MS = 100;

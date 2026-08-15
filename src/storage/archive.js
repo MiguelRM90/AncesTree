@@ -21,9 +21,47 @@ import {
 } from './project-store.js';
 import { parseProject } from '../domain/model/schema.js';
 import { SCHEMA_VERSION } from '../domain/model/factories.js';
+import { exportGedcom } from '../domain/gedcom/export.js';
 import { MAX_ZIP_ENTRIES, MAX_UNZIPPED_BYTES } from '../config/limits.js';
 
+export const GEDCOM_FILE = 'family.ged';
+
 const ZIP_TYPES = [{ description: 'AncesTree archive', accept: { 'application/zip': ['.zip'] } }];
+const GEDCOM_TYPES = [
+  { description: 'GEDCOM file', accept: { 'text/vnd.familysearch.gedcom': ['.ged'] } },
+];
+
+/**
+ * Writes family.ged next to family.json, so the project folder always carries a
+ * copy other genealogy software can read. Called on save and included in the
+ * ZIP; the JSON remains the source of truth.
+ */
+export async function writeGedcom(dirHandle, project) {
+  const handle = await dirHandle.getFileHandle(GEDCOM_FILE, { create: true });
+  const writable = await handle.createWritable();
+  await writable.write(exportGedcom(project));
+  await writable.close();
+}
+
+/** Exports a standalone .ged to wherever the user chooses. Requires a gesture. */
+export async function exportGedcomFile(project) {
+  let fileHandle;
+  try {
+    fileHandle = await window.showSaveFilePicker({
+      suggestedName: `${safeFileName(project.project.title)}.ged`,
+      types: GEDCOM_TYPES,
+    });
+  } catch (cause) {
+    if (cause.name === 'AbortError') return { ok: false, cancelled: true };
+    throw new StorageError('PICKER_FAILED', 'Could not open the save dialog', cause);
+  }
+
+  const writable = await fileHandle.createWritable();
+  await writable.write(exportGedcom(project));
+  await writable.close();
+
+  return { ok: true, persons: project.persons.length };
+}
 
 // --- Export ----------------------------------------------------------------
 
@@ -56,11 +94,15 @@ export async function exportProject(dirHandle, project) {
   // decompressing anything else.
   await zip.addBytes(MANIFEST_FILE, encoder.encode(stringify(buildManifest(project))));
   await zip.addBytes(FAMILY_FILE, encoder.encode(stringify(project)));
-  entries += 2;
+
+  // Regenerated rather than copied: whatever is on disk may predate the last
+  // edits, and an archive handed to a relative should carry a current GEDCOM.
+  await zip.addBytes(GEDCOM_FILE, encoder.encode(exportGedcom(project)));
+  entries += 3;
 
   for await (const { path, handle } of walk(dirHandle)) {
     // Skipped: rebuilt on export, or local history that should not travel.
-    if (path === FAMILY_FILE || path === MANIFEST_FILE) continue;
+    if (path === FAMILY_FILE || path === MANIFEST_FILE || path === GEDCOM_FILE) continue;
     if (path === BACKUPS_DIR || path.startsWith(`${BACKUPS_DIR}/`)) continue;
 
     await zip.addFile(path, await handle.getFile());

@@ -15,6 +15,23 @@ path {
 }
 path.partner { stroke-width: calc(var(--line-width) + 0.5px); }
 
+/* The route from one person up to their parents, while they are pointed at. */
+path.lit {
+  stroke: var(--c-accent);
+  stroke-width: calc(var(--line-width) + 2px);
+}
+
+/* Pinned by clicking the union node: stays until it is clicked again. */
+path.pinned {
+  stroke-width: calc(var(--line-width) + 2.5px);
+}
+
+@media (forced-colors: active) {
+  path.lit {
+    stroke: Highlight;
+  }
+}
+
 /* SVG strokes are not reliably replaced in forced colours mode, so they are
    mapped explicitly. */
 @media (forced-colors: active) {

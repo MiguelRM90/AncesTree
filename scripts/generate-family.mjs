@@ -191,7 +191,13 @@ function makeSpouse(generation, partnerSex) {
     });
     const unknown = createPerson({ id: uuid(), isPlaceholder: true });
     persons.push(unknown);
-    descend(known, unknown, spouse, null);
+
+    // The pair gets a union even though one of them has no name. Without it
+    // they render as two unconnected cards each dropping its own line to the
+    // same child, which reads as two unrelated parents rather than a couple
+    // one of whom was never recorded.
+    const union = marry(known, unknown, FIRST_BIRTH_YEAR + (generation - 1) * GENERATION_YEARS + 24);
+    descend(known, unknown, spouse, union);
   }
 
   return spouse;

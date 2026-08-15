@@ -38,6 +38,7 @@ export const S = {
     empty: 'No one here yet.',
     addFirstPerson: 'Add the first person',
     focusHint: 'Click a person to centre the tree on them. Click again to edit.',
+    pinUnion: (couple) => `Keep the children of ${couple} highlighted`,
     saving: 'Saving…',
     saved: 'Saved',
     saveError: 'Could not save. Check that the folder is still available.',
@@ -53,6 +54,9 @@ export const S = {
     redo: 'Redo',
     exportZip: 'Export ZIP',
     importZip: 'Import ZIP',
+    exportGedcom: 'Export GEDCOM',
+    back: 'Back',
+    backTo: 'Back to the previous person',
     ancestors: 'Up',
     descendants: 'Down',
     centredOn: 'Centred on',
@@ -76,6 +80,9 @@ export const S = {
     merged: (added) =>
       `Imported · ${added.persons} people, ${added.unions} unions, ${added.media} media added`,
     imported: 'Archive imported',
+    gedcomWritten: (n) => `GEDCOM written · ${n} people`,
+    gedcomLossy:
+      'GEDCOM cannot hold everything this app records. The ZIP is the faithful copy.',
     // A damaged file is reported rather than aborting the whole import.
     damaged: (n) => `${n} ${n === 1 ? 'file was' : 'files were'} damaged and may be incomplete`,
   },
@@ -134,6 +141,12 @@ export const S = {
 
   card: {
     issues: (n) => `${n} ${n === 1 ? 'note' : 'notes'} on this person`,
+  },
+
+  search: {
+    label: 'Search for a person',
+    placeholder: 'Search…',
+    noResults: 'Nobody by that name.',
   },
 
   notice: {

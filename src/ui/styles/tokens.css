@@ -65,7 +65,13 @@
   --card-height: 4.75rem;
   --line-width: 1.75px;
   --row-gap: 4rem;
-  --node-gap: 1.5rem;
+  --node-gap: 1rem;
+
+  /* One set of siblings has to be visibly one set. The gap between families is
+     several times the gap inside a couple, so where a family ends is obvious
+     without reading a single line. */
+  --sibling-gap: 1.5rem;
+  --family-gap: 5rem;
 }
 
 @media (prefers-color-scheme: dark) {

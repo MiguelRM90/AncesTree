@@ -24,9 +24,11 @@
 }
 
 /* Layout spacers: empty, invisible elements that reserve room between
-   branches to avoid overlap and keep the layout symmetric. NOT to be confused
-   with the model's placeholder people. */
-.spacer { width: var(--s-8); flex: 0 0 auto; }
+   branches. NOT to be confused with the model's placeholder people.
+   The wide one marks where one set of siblings ends and the next begins. */
+.spacer { flex: 0 0 auto; }
+.spacer[data-size='couple'] { width: var(--sibling-gap); }
+.spacer[data-size='family'] { width: var(--family-gap); }
 
 .hint {
   position: absolute;

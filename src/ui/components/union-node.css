@@ -5,18 +5,44 @@
   align-self: center;
 }
 
-/* Marriage versus an informal union is signalled by fill, not only by
-   colour: a filled dot for a marriage, a hollow ring otherwise. Hue alone
-   would be invisible to a colour-blind reader and in forced colours mode. */
-.dot {
+/**
+ * Marriage versus an informal union is signalled by fill, not only by colour:
+ * a filled dot for a marriage, a hollow ring otherwise. Hue alone would be
+ * invisible to a colour-blind reader and in forced colours mode.
+ */
+button.dot {
   width: var(--s-3);
   height: var(--s-3);
+  padding: 0;
   border-radius: 50%;
   border: 2px solid var(--c-line);
   background: var(--c-bg);
+  cursor: pointer;
 }
 
-:host([type='MARRIED']) .dot {
+:host([type='MARRIED']) button.dot {
   background: var(--c-accent);
   border-color: var(--c-accent);
+}
+
+button.dot:hover {
+  border-color: var(--c-accent);
+  transform: scale(1.35);
+}
+
+/**
+ * Pinned: the ring stays on until it is clicked again. Hovering a person only
+ * highlights while the pointer is on them, which is no use when following a
+ * line means scrolling far enough that the pointer has to leave.
+ */
+:host([pinned]) button.dot {
+  transform: scale(1.35);
+  box-shadow: 0 0 0 3px var(--c-accent-soft);
+  border-color: var(--c-accent);
+}
+
+@media (forced-colors: active) {
+  :host([pinned]) button.dot {
+    border-color: Highlight;
+  }
 }

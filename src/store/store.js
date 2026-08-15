@@ -21,7 +21,7 @@ import { mergeProjects } from '../domain/model/merge.js';
 import { loadProject, writeProject } from '../storage/project-store.js';
 import { rememberProject } from '../storage/handles.js';
 import { photoUrl, releaseAll } from '../storage/media-cache.js';
-import { AUTOSAVE_DEBOUNCE_MS, UNDO_STACK_SIZE } from '../config/limits.js';
+import { AUTOSAVE_DEBOUNCE_MS, UNDO_STACK_SIZE, TRAIL_LENGTH } from '../config/limits.js';
 
 class Store extends EventTarget {
   #project = null;
@@ -33,6 +33,8 @@ class Store extends EventTarget {
   #saving = false;
   #undo = [];
   #redo = [];
+  /** Where the user has been, so "back" means something. Not an edit history. */
+  #trail = [];
 
   get project() { return this.#project; }
   get graph() { return this.#indexes; }
@@ -86,6 +88,7 @@ class Store extends EventTarget {
     this.#dirHandle = dirHandle;
     this.#undo = [];
     this.#redo = [];
+    this.#trail = [];
     this.#reindex();
   }
 
@@ -155,11 +158,44 @@ class Store extends EventTarget {
     return { ...result, ...summary };
   }
 
-  setFocalPerson(personId) {
-    return this.apply(
+  get canGoBack() {
+    return this.#trail.length > 0;
+  }
+
+  /**
+   * Centres the tree on someone, remembering where we came from.
+   *
+   * Kept apart from undo: moving around is not an edit, and mixing the two
+   * would mean "undo" sometimes reverses a change and sometimes just walks
+   * backwards, which is the kind of ambiguity that makes people stop trusting
+   * the button.
+   */
+  setFocalPerson(personId, { remember = true } = {}) {
+    const previous = this.focalPersonId;
+    if (personId === previous) return { ok: true };
+
+    const result = this.apply(
       (p) => ({ ...p, settings: { ...p.settings, focalPersonId: personId } }),
       { label: 'focus', record: false },
     );
+
+    if (result.ok && remember && previous !== null) {
+      this.#trail.push(previous);
+      if (this.#trail.length > TRAIL_LENGTH) this.#trail.shift();
+      this.#emit('trail');
+    }
+
+    return result;
+  }
+
+  /** Steps back to whoever was centred before. */
+  goBack() {
+    const previous = this.#trail.pop();
+    if (previous === undefined) return { ok: false };
+
+    const result = this.setFocalPerson(previous, { remember: false });
+    this.#emit('trail');
+    return result;
   }
 
   #reindex() {
