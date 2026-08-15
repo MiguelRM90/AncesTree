@@ -64,3 +64,40 @@ hr {
 @media (pointer: coarse) {
   button, select, input { min-height: 2.75rem; }
 }
+
+/**
+ * Phone width: the menu stops hanging off its button and becomes a sheet on
+ * the bottom edge of the screen.
+ *
+ * Anchoring it to the trigger cannot work here. On a phone the toolbar is a
+ * row that scrolls sideways, and that costs the menu twice over: the scroll
+ * container clips anything drawn outside it, and the trigger's own position
+ * moves with the scroll. Both were measured — one menu opened underneath the
+ * header where nothing could reach it, the other opened at x = 526 on a 390 px
+ * screen, which is to say nowhere.
+ *
+ * `position: fixed` is what fixes it, and it fixes both at once: its containing
+ * block is the viewport, so the scroll container neither clips it nor moves it.
+ * Pinned to the bottom edge it also needs no coordinates at all — the tree
+ * layout engine is not the only place in this app that is better off not
+ * measuring the DOM.
+ */
+@media (max-width: 640px) {
+  .menu {
+    position: fixed;
+    inset: auto 0 0 0;
+    width: auto;
+    min-width: 0;
+    max-height: 70dvh;
+    overflow-y: auto;
+    padding: var(--s-2);
+    gap: var(--s-1);
+    border-radius: var(--radius) var(--radius) 0 0;
+    border-bottom: none;
+    /* Reads as a layer over the tree rather than part of it. */
+    box-shadow: 0 -0.5rem 2rem rgb(0 0 0 / 35%);
+  }
+
+  /* A full-width sheet has the room to wrap a long label instead of clipping. */
+  .menu button { white-space: normal; }
+}
