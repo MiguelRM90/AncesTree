@@ -3,15 +3,15 @@
 export const en = {
   app: {
     name: 'AncesTree',
-    tagline: 'A family tree that lives on your own computer.',
+    tagline: 'A family tree you keep yourself.',
   },
 
   unsupported: {
     title: 'This browser is not supported',
     body:
-      'AncesTree stores your family archive in a folder on your own disk, using the File System Access API. ' +
-      'That API is only available in Chromium-based desktop browsers.',
-    supported: 'Use Chrome, Edge, Opera, Brave or Vivaldi on a desktop computer.',
+      'AncesTree needs somewhere durable to keep a family archive, and a way to write files to it a ' +
+      'piece at a time. This browser offers neither.',
+    supported: 'Use a current version of Chrome, Edge, Firefox or Safari.',
     missing: 'Missing capabilities:',
     fileProtocol:
       'AncesTree cannot run from a file:// URL. Serve it over http(s) or install it as an app.',
@@ -26,6 +26,37 @@ export const en = {
     defaultName: 'My family',
     deniedFolder: 'Permission to that folder was not granted.',
     missingFolder: 'That folder is no longer available. Choose it again.',
+
+    // Browser storage: there is no folder picker, so the app keeps the list.
+    archives: 'Your archives',
+    noArchives: 'No archives yet. Start one, or import a ZIP somebody sent you.',
+    archiveMeta: (persons, savedAt) => {
+      const who = `${persons} ${persons === 1 ? 'person' : 'people'}`;
+      return savedAt ? `${who} · saved ${savedAt}` : who;
+    },
+    deleteArchive: 'Delete',
+    deleteArchiveLabel: (title) => `Delete ${title}`,
+    confirmDelete: (title) =>
+      `Delete “${title}” for good?\n\nIt exists in this browser only. Unless you have exported a ZIP, ` +
+      'there is no other copy, and this cannot be undone.',
+    missingArchive: 'That archive is no longer there.',
+    browserHint: 'Your archive is kept by the browser on this device. Export a ZIP to keep a copy of your own.',
+  },
+
+  /** Said plainly and more than once, because this storage really is weaker. */
+  browserStorage: {
+    badge: 'In browser storage',
+    title: 'This archive lives inside your browser',
+    body:
+      'This device has no folder picker, so AncesTree keeps the archive in storage the browser owns. ' +
+      'Clearing site data deletes it, and some browsers discard it after a few weeks without a visit.',
+    advice: 'Export a ZIP every so often and put it somewhere you chose. That copy is the one that is yours.',
+    installHint: 'Adding AncesTree to your home screen makes the browser far less likely to discard it.',
+    persisted: 'The browser has agreed to hold on to this storage.',
+    notPersisted: 'The browser has not promised to hold on to this storage.',
+    usage: (used) => `Currently using ${used}.`,
+    exportNow: 'Export a ZIP now',
+    dismiss: 'Got it',
   },
 
   tree: {
@@ -76,7 +107,7 @@ export const en = {
     mergeHint:
       'Adds anything missing, matching by id. Anything already here keeps the local version.',
     openAsNew: 'Open as a new family',
-    openAsNewHint: 'Extracts into an empty folder you choose. Nothing existing is touched.',
+    openAsNewHint: 'Extracts into a new archive of its own. Nothing existing is touched.',
     merged: (added) =>
       `Imported · ${added.persons} people, ${added.unions} unions, ${added.media} media added`,
     imported: 'Archive imported',

@@ -11,23 +11,23 @@
 import { ZipWriter } from './zip/write.js';
 import { openArchive, findEntry, ZipError } from './zip/read.js';
 import { Crc32 } from './zip/crc32.js';
+import { StorageError } from './error.js';
+import { openFile, saveFile } from './file-dialog.js';
 import {
   FAMILY_FILE,
   MANIFEST_FILE,
+  GEDCOM_FILE,
   PHOTOS_DIR,
   DOCUMENTS_DIR,
   BACKUPS_DIR,
-  StorageError,
-  buildManifest,
-  loadProject,
-  writeProject,
-} from './project-store.js';
+} from './names.js';
+import { buildManifest, loadProject, writeProject, newDirectory } from './project-store.js';
 import { parseProject } from '../domain/model/schema.js';
 import { exportGedcom } from '../domain/gedcom/export.js';
 import { importGedcom } from '../domain/gedcom/import.js';
 import { MAX_ZIP_ENTRIES, MAX_UNZIPPED_BYTES, MAX_GEDCOM_BYTES } from '../config/limits.js';
 
-export const GEDCOM_FILE = 'family.ged';
+export { GEDCOM_FILE };
 
 const ZIP_TYPES = [{ description: 'AncesTree archive', accept: { 'application/zip': ['.zip'] } }];
 const GEDCOM_TYPES = [
@@ -51,14 +51,8 @@ export async function writeGedcom(dirHandle, project) {
  * anything. The caller shows the summary and decides what to do with it.
  */
 export async function pickAndReadGedcom() {
-  let file;
-  try {
-    const [handle] = await window.showOpenFilePicker({ types: GEDCOM_TYPES, multiple: false });
-    file = await handle.getFile();
-  } catch (cause) {
-    if (cause.name === 'AbortError') return null;
-    throw new StorageError('PICKER_FAILED', 'Could not open the file picker', cause);
-  }
+  const file = await openFile({ types: GEDCOM_TYPES });
+  if (!file) return null;
 
   if (file.size > MAX_GEDCOM_BYTES) {
     throw new StorageError('TOO_LARGE', 'That GEDCOM is larger than the allowed maximum');
@@ -87,74 +81,68 @@ function decodeGedcom(bytes) {
   return new TextDecoder(label).decode(bytes);
 }
 
-/** Exports a standalone .ged to wherever the user chooses. Requires a gesture. */
+/** Exports a standalone .ged to wherever the platform can put one. Needs a gesture. */
 export async function exportGedcomFile(project) {
-  let fileHandle;
-  try {
-    fileHandle = await window.showSaveFilePicker({
-      suggestedName: `${safeFileName(project.project.title)}.ged`,
-      types: GEDCOM_TYPES,
-    });
-  } catch (cause) {
-    if (cause.name === 'AbortError') return { ok: false, cancelled: true };
-    throw new StorageError('PICKER_FAILED', 'Could not open the save dialog', cause);
-  }
+  const result = await saveFile({
+    suggestedName: `${safeFileName(project.project.title)}.ged`,
+    types: GEDCOM_TYPES,
+    mime: 'text/plain',
+    write: async (writable) => {
+      await writable.write(exportGedcom(project));
+      await writable.close();
+    },
+  });
 
-  const writable = await fileHandle.createWritable();
-  await writable.write(exportGedcom(project));
-  await writable.close();
-
-  return { ok: true, persons: project.persons.length };
+  return result.ok ? { ok: true, persons: project.persons.length } : result;
 }
 
 // --- Export ----------------------------------------------------------------
 
 /**
- * Writes the whole project to a ZIP chosen by the user.
+ * Writes the whole project to a ZIP.
  *
- * The archive is streamed straight to disk, so project size is bounded by the
- * disk rather than by RAM. Requires a user gesture.
+ * The archive is streamed rather than assembled in memory, so its size is
+ * bounded by storage and not by RAM — on a phone as much as on a desktop, since
+ * the download fallback streams into a scratch file too (file-dialog.js).
+ * Requires a user gesture.
  *
  * @returns {Promise<{ok: boolean, cancelled?: boolean, entries?: number}>}
  */
 export async function exportProject(dirHandle, project) {
-  let fileHandle;
-  try {
-    fileHandle = await window.showSaveFilePicker({
-      suggestedName: `${safeFileName(project.project.title)}.zip`,
-      types: ZIP_TYPES,
-    });
-  } catch (cause) {
-    if (cause.name === 'AbortError') return { ok: false, cancelled: true };
-    throw new StorageError('PICKER_FAILED', 'Could not open the save dialog', cause);
-  }
-
-  const writable = await fileHandle.createWritable();
-  const zip = new ZipWriter(writable);
-  const encoder = new TextEncoder();
   let entries = 0;
 
-  // The manifest goes first so a reader can identify the archive without
-  // decompressing anything else.
-  await zip.addBytes(MANIFEST_FILE, encoder.encode(stringify(buildManifest(project))));
-  await zip.addBytes(FAMILY_FILE, encoder.encode(stringify(project)));
+  const result = await saveFile({
+    suggestedName: `${safeFileName(project.project.title)}.zip`,
+    types: ZIP_TYPES,
+    mime: 'application/zip',
+    write: async (writable) => {
+      const zip = new ZipWriter(writable);
+      const encoder = new TextEncoder();
 
-  // Regenerated rather than copied: whatever is on disk may predate the last
-  // edits, and an archive handed to a relative should carry a current GEDCOM.
-  await zip.addBytes(GEDCOM_FILE, encoder.encode(exportGedcom(project)));
-  entries += 3;
+      // The manifest goes first so a reader can identify the archive without
+      // decompressing anything else.
+      await zip.addBytes(MANIFEST_FILE, encoder.encode(stringify(buildManifest(project))));
+      await zip.addBytes(FAMILY_FILE, encoder.encode(stringify(project)));
 
-  for await (const { path, handle } of walk(dirHandle)) {
-    // Skipped: rebuilt on export, or local history that should not travel.
-    if (path === FAMILY_FILE || path === MANIFEST_FILE || path === GEDCOM_FILE) continue;
-    if (path === BACKUPS_DIR || path.startsWith(`${BACKUPS_DIR}/`)) continue;
+      // Regenerated rather than copied: whatever is stored may predate the last
+      // edits, and an archive handed to a relative should carry a current GEDCOM.
+      await zip.addBytes(GEDCOM_FILE, encoder.encode(exportGedcom(project)));
+      entries = 3;
 
-    await zip.addFile(path, await handle.getFile());
-    entries += 1;
-  }
+      for await (const { path, handle } of walk(dirHandle)) {
+        // Skipped: rebuilt on export, or local history that should not travel.
+        if (path === FAMILY_FILE || path === MANIFEST_FILE || path === GEDCOM_FILE) continue;
+        if (path === BACKUPS_DIR || path.startsWith(`${BACKUPS_DIR}/`)) continue;
 
-  await zip.close();
-  return { ok: true, entries };
+        await zip.addFile(path, await handle.getFile());
+        entries += 1;
+      }
+
+      await zip.close();
+    },
+  });
+
+  return result.ok ? { ok: true, entries } : result;
 }
 
 async function* walk(dirHandle, prefix = '') {
@@ -168,14 +156,8 @@ async function* walk(dirHandle, prefix = '') {
 // --- Import ----------------------------------------------------------------
 
 /** Opens the file picker for an archive. Requires a user gesture. */
-export async function pickArchive() {
-  try {
-    const [handle] = await window.showOpenFilePicker({ types: ZIP_TYPES, multiple: false });
-    return await handle.getFile();
-  } catch (cause) {
-    if (cause.name === 'AbortError') return null;
-    throw new StorageError('PICKER_FAILED', 'Could not open the file picker', cause);
-  }
+export function pickArchive() {
+  return openFile({ types: ZIP_TYPES });
 }
 
 /**
@@ -236,13 +218,8 @@ export async function inspectArchive(file) {
  * extract — only a graph to save somewhere.
  */
 export async function createProjectFrom(project) {
-  let dirHandle;
-  try {
-    dirHandle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'ancestree-import' });
-  } catch (cause) {
-    if (cause.name === 'AbortError') return { ok: false, cancelled: true };
-    throw new StorageError('PICKER_FAILED', 'Could not open the folder picker', cause);
-  }
+  const dirHandle = await newDirectory(project.project.title);
+  if (!dirHandle) return { ok: false, cancelled: true };
 
   if (await hasEntry(dirHandle, FAMILY_FILE)) {
     throw new StorageError('NOT_EMPTY', 'That folder already contains an AncesTree project');
@@ -262,13 +239,8 @@ export async function createProjectFrom(project) {
  * This is the default strategy: it never touches anything that already exists.
  */
 export async function importAsNewProject(inspection) {
-  let dirHandle;
-  try {
-    dirHandle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'ancestree-import' });
-  } catch (cause) {
-    if (cause.name === 'AbortError') return { ok: false, cancelled: true };
-    throw new StorageError('PICKER_FAILED', 'Could not open the folder picker', cause);
-  }
+  const dirHandle = await newDirectory(inspection.project.project.title);
+  if (!dirHandle) return { ok: false, cancelled: true };
 
   if (await hasEntry(dirHandle, FAMILY_FILE)) {
     throw new StorageError('NOT_EMPTY', 'That folder already contains an AncesTree project');

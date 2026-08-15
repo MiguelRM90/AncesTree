@@ -6,11 +6,23 @@
     <meta http-equiv="Content-Security-Policy" content="%CSP%" />
 
     <title>AncesTree</title>
-    <meta name="description" content="A family tree that lives on your own computer." />
+    <meta name="description" content="A family tree you keep yourself." />
     <meta name="color-scheme" content="light dark" />
+
+    <!--
+      Installed to the home screen, iOS stops treating the site as an ordinary
+      tab — which is also what exempts its storage from being discarded after a
+      week of not visiting. On a phone the archive lives in browser storage
+      (storage.md), so this is not decoration; it is what keeps the data.
+    -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="AncesTree" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
 
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="icon-192.png" />
 
     <script type="module" src="/src/main.js"></script>
   </head>

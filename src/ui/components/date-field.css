@@ -16,3 +16,11 @@ input.year { flex: 0 0 6rem; }
 
 .preview { font-size: var(--fs-sm); color: var(--c-text-muted); min-height: 1.2em; }
 .preview.unknown { color: var(--c-warning); }
+
+/**
+ * A finger is not a mouse pointer: 44 px is the smallest control most people
+ * can hit reliably, and the default padding leaves these around 34.
+ */
+@media (pointer: coarse) {
+  button, select, input { min-height: 2.75rem; }
+}

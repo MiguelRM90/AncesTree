@@ -11,6 +11,7 @@
  * invisible to a colour-blind reader and in forced colours mode.
  */
 button.dot {
+  position: relative;
   width: 100%;
   height: 100%;
   padding: 0;
@@ -18,6 +19,22 @@ button.dot {
   border: 2px solid var(--c-line);
   background: var(--c-bg);
   cursor: pointer;
+}
+
+/**
+ * A finger needs about 44 px; the dot is a fraction of that, and growing it
+ * would move every line in the tree, since the layout engine positions unions
+ * by coordinate rather than by measuring them.
+ *
+ * So the target grows and the dot does not: an empty pseudo-element sticking
+ * out past the button on every side. It is out of the flow, so nothing moves.
+ */
+@media (pointer: coarse) {
+  button.dot::after {
+    content: '';
+    position: absolute;
+    inset: -0.75rem;
+  }
 }
 
 :host([type='MARRIED']) button.dot {

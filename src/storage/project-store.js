@@ -1,28 +1,46 @@
 /**
  * Reading and writing the project folder (storage.md).
  *
- * The WHOLE project is a folder on disk. family.json is read when opening, kept
- * in memory while working, and rewritten on save.
+ * The WHOLE project is a folder. family.json is read when opening, kept in
+ * memory while working, and rewritten on save.
+ *
+ * Nothing here knows whether that folder is on the user's disk or inside the
+ * browser's own storage. It is handed a FileSystemDirectoryHandle and both
+ * backends provide one (backend.js).
  */
 
 import { parseProject, validateProject } from '../domain/model/schema.js';
 import { createProject, APP_VERSION } from '../domain/model/factories.js';
 import { MAX_JSON_BYTES, BACKUP_COPIES } from '../config/limits.js';
+import { StorageError } from './error.js';
+import { isBrowserStorage } from './backend.js';
+import { createBrowserFolder } from './opfs.js';
+import {
+  FAMILY_FILE,
+  MANIFEST_FILE,
+  PHOTOS_DIR,
+  DOCUMENTS_DIR,
+  BACKUPS_DIR,
+} from './names.js';
 
-export const FAMILY_FILE = 'family.json';
-export const MANIFEST_FILE = 'manifest.json';
-export const PHOTOS_DIR = 'photos';
-export const DOCUMENTS_DIR = 'documents';
-export const BACKUPS_DIR = 'backups';
+export { StorageError };
+export { FAMILY_FILE, MANIFEST_FILE, PHOTOS_DIR, DOCUMENTS_DIR, BACKUPS_DIR };
 
-export class StorageError extends Error {
-  constructor(code, message, cause) {
-    super(message, { cause });
-    this.code = code;
-  }
+/**
+ * A folder for a project that does not exist yet.
+ *
+ * On disk the user picks one, which is also how they decide where their archive
+ * lives. In browser storage there is nothing to pick, so one is created from the
+ * title — the price of the app running at all where there is no folder picker.
+ *
+ * Requires a user gesture.
+ */
+export async function newDirectory(title) {
+  if (isBrowserStorage()) return createBrowserFolder(title);
+  return pickDirectory();
 }
 
-/** Opens the folder picker. Requires a user gesture. */
+/** Opens the folder picker. DISK mode only. Requires a user gesture. */
 export async function pickDirectory() {
   try {
     return await window.showDirectoryPicker({ mode: 'readwrite', id: 'ancestree-project' });

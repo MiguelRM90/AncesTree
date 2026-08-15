@@ -41,7 +41,14 @@ dialog::backdrop { background: rgb(0 0 0 / 35%); }
 }
 h2 { margin: 0; font-size: var(--fs-lg); }
 
-.pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-3); }
+/**
+ * minmax(0, 1fr), not 1fr.
+ *
+ * A bare `1fr` track has an automatic minimum of min-content, and an <input>
+ * reports a min-content width of roughly twenty characters. Two of those refuse
+ * to fit a narrow window and the second column leaves the dialog altogether.
+ */
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--s-3); }
 label { display: grid; gap: var(--s-1); font-size: var(--fs-sm); color: var(--c-text-muted); }
 
 input, select, textarea {
@@ -51,6 +58,9 @@ input, select, textarea {
   border: 1px solid var(--c-border);
   border-radius: var(--radius-sm);
   padding: var(--s-2);
+  /* So a field can be narrower than its own default size, padding included. */
+  min-width: 0;
+  box-sizing: border-box;
 }
 textarea { resize: vertical; min-height: 4rem; }
 
@@ -61,6 +71,8 @@ fieldset {
   display: grid;
   gap: var(--s-3);
   margin: 0;
+  /* A fieldset's min-width defaults to min-content, and ignores the grid. */
+  min-width: 0;
 }
 legend { font-size: var(--fs-sm); color: var(--c-text-muted); padding: 0 var(--s-1); }
 
@@ -108,3 +120,33 @@ footer {
   flex: 0 0 auto;
 }
 footer .danger { margin-right: auto; color: var(--c-error); border-color: var(--c-error); }
+
+/**
+ * A finger is not a mouse pointer: 44 px is the smallest control most people
+ * can hit reliably, and the default padding leaves these around 34.
+ */
+@media (pointer: coarse) {
+  button, select, input { min-height: 2.75rem; }
+}
+
+/**
+ * Phone width. Last in the file, after every rule it overrides.
+ *
+ * Two columns of form fields do not fit 390 px however hard they are squeezed,
+ * so they become one. The footer wraps rather than pushing Save off the right
+ * edge — the whole reason this dialog has a fixed footer in the first place is
+ * that saving must always be reachable.
+ */
+@media (max-width: 640px) {
+  .body { padding: var(--s-4); gap: var(--s-3); }
+  .pair { grid-template-columns: minmax(0, 1fr); }
+
+  footer {
+    flex-wrap: wrap;
+    padding: var(--s-3) var(--s-4);
+  }
+
+  /* Delete stays at the far end from Save, wrapped or not. Putting the two
+     next to each other on a touch screen is how a family gets deleted. */
+  footer .danger { margin-right: auto; }
+}

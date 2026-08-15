@@ -1,12 +1,33 @@
-:host { display: grid; grid-template-rows: auto 1fr; height: 100vh; }
+/**
+ * dvh, not vh: on a phone the address bar slides in and out, and 100vh is the
+ * height WITHOUT it. A tree measured that way is permanently a bar too tall,
+ * so the page scrolls as a whole and the header leaves the screen.
+ */
+/**
+ * minmax(0, 1fr) for the column, and it is load-bearing.
+ *
+ * An implicit `auto` grid track takes as its minimum the min-content width of
+ * its widest item, and that minimum is NOT clamped to the container. So the
+ * toolbar's natural width pushed this single column to 787 px inside a 390 px
+ * app-root: the header, the tree and every dialog then laid themselves out
+ * against a viewport that was no longer the screen, and the right-hand side of
+ * everything hung off the edge. Same defect as `.pair` in the person editor.
+ */
+:host {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  grid-template-columns: minmax(0, 1fr);
+  height: 100vh;
+  height: 100dvh;
+}
 
 /**
  * The header wraps rather than overflowing.
  *
- * There is no mobile layout — the app cannot run on a phone at all, because no
- * mobile browser implements File System Access (storage.md). What does need
- * handling is a narrow desktop window: a laptop screen, or the browser docked
- * beside an editor.
+ * Three widths matter: a desktop window, a narrow one (a laptop, or the browser
+ * docked beside an editor), and a phone — where the app now runs, because the
+ * archive can live in browser storage when there is no folder picker
+ * (storage.md, storage modes).
  */
 header {
   display: flex;
@@ -50,6 +71,90 @@ h1 { font-size: var(--fs-base); margin: 0 var(--s-4) 0 0; font-weight: 600; }
   h1 { margin-right: var(--s-2); }
 }
 
+/**
+ * Where the archive is kept, when it is kept by the browser.
+ *
+ * Amber rather than red: this is a real caveat, not an error, and colouring it
+ * like a failure would teach the user to ignore it.
+ */
+.badge {
+  font-size: var(--fs-sm);
+  padding: var(--s-1) var(--s-2);
+  border-radius: 999px;
+  border: 1px solid var(--c-warning);
+  background: var(--c-warning-soft);
+  color: var(--c-warning);
+}
+
+.badge:hover { border-color: var(--c-warning); }
+
+/* --- The list of archives in browser storage ----------------------------- */
+
+/**
+ * Written as .screen.listing, not .listing: the .screen block further down sets
+ * centred text and a narrower column, and a single class would lose to it on
+ * source order alone. Two classes win wherever they are written.
+ *
+ * align-content: start rather than the centring .screen does — a list long
+ * enough to overflow a centred grid loses its first rows off the top, where no
+ * amount of scrolling brings them back.
+ */
+.screen.listing {
+  max-width: 40rem;
+  justify-items: stretch;
+  align-content: start;
+  text-align: left;
+  gap: var(--s-3);
+}
+
+.listing h2, .listing h3 { margin: 0; }
+.listing h3 { font-size: var(--fs-base); margin-top: var(--s-4); }
+.hint { font-size: var(--fs-sm); }
+
+.archives {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--s-2);
+}
+
+.archives li {
+  display: flex;
+  align-items: stretch;
+  gap: var(--s-2);
+}
+
+/* The whole row is the button: a tap target the size of the thing it names. */
+.archive {
+  flex: 1;
+  display: grid;
+  gap: var(--s-1);
+  text-align: left;
+  padding: var(--s-3);
+}
+
+.archive .meta { font-size: var(--fs-sm); color: var(--c-text-muted); }
+
+.danger { color: var(--c-error); border-color: var(--c-border); }
+.danger:hover { border-color: var(--c-error); background: var(--c-error-soft); }
+
+/* Name first, then create: the field is what the button acts on. */
+.named { display: flex; gap: var(--s-2); flex: 1 1 16rem; }
+
+.name {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  color: var(--c-text);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  padding: var(--s-2) var(--s-3);
+}
+
+.listing .actions { flex-wrap: wrap; }
+
 /* A disabled control still has to be legible: 0.45 opacity pushed the label
    under 3:1. Muted colours say "unavailable" without dissolving the text. */
 button[disabled] {
@@ -65,6 +170,9 @@ main {
   position: relative;
   overflow: hidden;
   display: grid;
+  /* As above: the tree is far wider than the screen, and an auto track would
+     size itself to it rather than letting .surface scroll. */
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .surface {
@@ -115,3 +223,64 @@ main {
 .actions { display: flex; gap: var(--s-3); margin-top: var(--s-4); }
 code { font-family: var(--font-mono); font-size: var(--fs-sm); }
 .error { color: var(--c-error); }
+
+/**
+ * A finger is not a mouse pointer: 44 px is the smallest control most people
+ * can hit reliably, and the default padding leaves these around 34.
+ */
+@media (pointer: coarse) {
+  button, select, input { min-height: 2.75rem; }
+}
+
+/**
+ * Phone width. LAST IN THE FILE, and that is not tidiness.
+ *
+ * A media query adds no specificity. Written further up, `.screen { padding }`
+ * here lost to the plain `.screen { padding: var(--s-12) }` below it, and the
+ * welcome screen sat 96 px wider than the viewport with its text cut off at the
+ * right edge. Every phone override goes after the rule it overrides.
+ *
+ * The toolbar is not thinned any further — each control is the only route to
+ * what it does, and hiding one would strand a feature. It scrolls sideways
+ * instead, on its own row, with the search above it at full width, because
+ * searching is how you get anywhere in a tree you cannot see all of.
+ */
+@media (max-width: 640px) {
+  header { padding: var(--s-2) var(--s-3); gap: var(--s-2) var(--s-1); }
+  h1 { display: none; }
+
+  /**
+   * Nothing in the header may push the page wider than the screen.
+   *
+   * A flex item's automatic minimum is its min-content width, so a search box
+   * or a row of buttons can refuse to shrink, widen the header, widen the page,
+   * and leave everything else measuring against a viewport that is no longer
+   * the screen. min-width: 0 lets them shrink; the ones that must not shrink
+   * scroll instead.
+   */
+  header > * { min-width: 0; }
+
+  .actions-inline {
+    order: 2;
+    width: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    /* Hides the bar only; the row still scrolls by touch, wheel and keyboard. */
+    scrollbar-width: none;
+    padding-bottom: var(--s-1);
+  }
+
+  /* Nothing in a scrolling row may shrink, or every label turns to ellipses. */
+  .actions-inline > * { flex: 0 0 auto; }
+
+  .spacer { display: none; }
+  person-search { order: 1; flex: 1 1 100%; }
+  .status, .badge { order: 3; }
+
+  /* The pinned label would sit on top of a phone-sized tree. */
+  .focal { display: none; }
+
+  .screen { padding: var(--s-6) var(--s-4); }
+  .screen.listing { max-width: 100%; }
+}

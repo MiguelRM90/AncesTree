@@ -44,9 +44,17 @@ export async function forgetProject(projectId) {
   await remove(Stores.PROJECTS, projectId);
 }
 
-/** Permission state without prompting. Safe to call on startup. */
+/**
+ * Permission state without prompting. Safe to call on startup.
+ *
+ * A handle from the origin private file system has no queryPermission at all,
+ * and that absence is the answer rather than a failure: the browser owns that
+ * storage, so there is no one to ask. Only a handle to the user's own disk
+ * carries a permission to check.
+ */
 export async function permissionState(handle) {
-  if (!handle?.queryPermission) return Permission.DENIED;
+  if (!handle) return Permission.DENIED;
+  if (typeof handle.queryPermission !== 'function') return Permission.GRANTED;
   return handle.queryPermission({ mode: 'readwrite' });
 }
 
@@ -57,6 +65,7 @@ export async function permissionState(handle) {
  * "Reopen <project>" button, NEVER automatically on page load.
  */
 export async function requestPermission(handle) {
-  if (!handle?.requestPermission) return Permission.DENIED;
+  if (!handle) return Permission.DENIED;
+  if (typeof handle.requestPermission !== 'function') return Permission.GRANTED;
   return handle.requestPermission({ mode: 'readwrite' });
 }

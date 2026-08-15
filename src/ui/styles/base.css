@@ -53,3 +53,33 @@ button.primary {
     border-color: CanvasText;
   }
 }
+
+/**
+ * On a phone a dialog stops being a floating box and becomes a sheet on the
+ * bottom edge: it is where the thumb already is, and full width is the only way
+ * a form is legible at 360 px.
+ *
+ * `margin: auto 0 0` overrides the centring the browser's own stylesheet does
+ * with `margin: auto`. dvh rather than vh so the sheet is measured against the
+ * screen the user can actually see, address bar included — which is what keeps
+ * the buttons at the bottom of a long form reachable.
+ *
+ * Written as `dialog[open]` so it beats each component's own bare `dialog`
+ * rule; every dialog in the app is styled the same way, so this belongs in one
+ * place rather than repeated in four.
+ */
+@media (max-width: 640px) {
+  dialog[open] {
+    /* dvw, never 100%. A percentage resolves against the containing block, and
+       for a modal dialog that is the initial containing block — which grows if
+       anything on the page overflows. The dialog then grows with it, keeps the
+       page overflowing, and the two hold each other open. Measured at 788 px on
+       a 390 px screen before this was viewport units. */
+    width: 100dvw;
+    max-width: 100dvw;
+    max-height: 92dvh;
+    margin: auto 0 0;
+    border-radius: var(--radius) var(--radius) 0 0;
+    border-bottom: none;
+  }
+}

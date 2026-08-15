@@ -1,7 +1,7 @@
 {
   "name": "AncesTree",
   "short_name": "AncesTree",
-  "description": "A family tree that lives on your own computer.",
+  "description": "A family tree you keep yourself.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

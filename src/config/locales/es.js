@@ -8,15 +8,15 @@
 export const es = {
   app: {
     name: 'AncesTree',
-    tagline: 'Un árbol genealógico que vive en tu propio ordenador.',
+    tagline: 'Un árbol genealógico que guardas tú.',
   },
 
   unsupported: {
     title: 'Este navegador no está soportado',
     body:
-      'AncesTree guarda tu archivo familiar en una carpeta de tu propio disco, usando la File System Access API. ' +
-      'Esa API solo existe en navegadores de escritorio basados en Chromium.',
-    supported: 'Usa Chrome, Edge, Opera, Brave o Vivaldi en un ordenador de escritorio.',
+      'AncesTree necesita un sitio duradero donde guardar el archivo familiar, y poder escribir en él ' +
+      'por partes. Este navegador no ofrece ninguna de las dos cosas.',
+    supported: 'Usa una versión actual de Chrome, Edge, Firefox o Safari.',
     missing: 'Funciones que faltan:',
     fileProtocol:
       'AncesTree no puede ejecutarse desde una URL file://. Sírvelo por http(s) o instálalo como aplicación.',
@@ -31,6 +31,42 @@ export const es = {
     defaultName: 'Mi familia',
     deniedFolder: 'No se concedió permiso sobre esa carpeta.',
     missingFolder: 'Esa carpeta ya no está disponible. Vuelve a elegirla.',
+
+    // Almacenamiento del navegador: no hay selector de carpeta, así que la
+    // lista la mantiene la propia aplicación.
+    archives: 'Tus archivos',
+    noArchives: 'Todavía no hay ninguno. Empieza uno, o importa un ZIP que te hayan pasado.',
+    archiveMeta: (persons, savedAt) => {
+      const who = `${persons} ${persons === 1 ? 'persona' : 'personas'}`;
+      return savedAt ? `${who} · guardado ${savedAt}` : who;
+    },
+    deleteArchive: 'Borrar',
+    deleteArchiveLabel: (title) => `Borrar ${title}`,
+    confirmDelete: (title) =>
+      `¿Borrar «${title}» definitivamente?\n\nSolo existe en este navegador. Si no has exportado un ZIP, ` +
+      'no hay otra copia, y esto no se puede deshacer.',
+    missingArchive: 'Ese archivo ya no está.',
+    browserHint:
+      'Tu archivo lo guarda el navegador de este dispositivo. Exporta un ZIP para tener una copia tuya.',
+  },
+
+  /** Dicho claro y más de una vez, porque este almacenamiento sí es más frágil. */
+  browserStorage: {
+    badge: 'En el navegador',
+    title: 'Este archivo vive dentro de tu navegador',
+    body:
+      'Este dispositivo no tiene selector de carpetas, así que AncesTree guarda el archivo en un ' +
+      'almacenamiento que gestiona el navegador. Si borras los datos del sitio, se borra; y algunos ' +
+      'navegadores lo descartan tras unas semanas sin visitarlo.',
+    advice:
+      'Exporta un ZIP de vez en cuando y guárdalo donde tú decidas. Esa copia es la que es tuya.',
+    installHint:
+      'Añadir AncesTree a la pantalla de inicio hace mucho menos probable que el navegador lo descarte.',
+    persisted: 'El navegador se ha comprometido a conservar este almacenamiento.',
+    notPersisted: 'El navegador no ha prometido conservar este almacenamiento.',
+    usage: (used) => `Ocupa ${used}.`,
+    exportNow: 'Exportar un ZIP ahora',
+    dismiss: 'Entendido',
   },
 
   tree: {
@@ -80,7 +116,7 @@ export const es = {
     mergeHint:
       'Añade lo que falte, cotejando por id. Lo que ya está aquí conserva la versión local.',
     openAsNew: 'Abrir como familia nueva',
-    openAsNewHint: 'Se extrae en una carpeta vacía que elijas. No se toca nada de lo existente.',
+    openAsNewHint: 'Se extrae en un archivo nuevo aparte. No se toca nada de lo existente.',
     merged: (added) =>
       `Importado · ${added.persons} personas, ${added.unions} uniones y ${added.media} medios añadidos`,
     imported: 'Archivo importado',

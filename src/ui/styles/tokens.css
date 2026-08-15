@@ -156,5 +156,13 @@ body {
   font: var(--fs-base) / 1.5 var(--font-body);
 }
 
-/* The app is desktop-only: there is no responsive design for mobile, because
-   File System Access exists in no mobile browser (see storage.md). */
+/**
+ * The app runs on a phone as well as a desktop, so nothing here may assume a
+ * wide window. The breakpoints live with the components that need them; what
+ * belongs at this level is only that the page itself never scrolls sideways —
+ * the tree scrolls inside its own surface, and everything else fits.
+ */
+html,
+body {
+  overflow-x: hidden;
+}

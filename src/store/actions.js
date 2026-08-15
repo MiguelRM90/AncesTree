@@ -6,7 +6,20 @@
  */
 
 import { store } from './store.js';
-import { pickDirectory, createProjectIn, StorageError } from '../storage/project-store.js';
+import {
+  pickDirectory,
+  newDirectory,
+  createProjectIn,
+  StorageError,
+} from '../storage/project-store.js';
+import { storageMode, StorageMode, isBrowserStorage } from '../storage/backend.js';
+import {
+  browserProjects,
+  browserFolder,
+  removeBrowserFolder,
+  requestPersistence,
+  storageEstimate,
+} from '../storage/opfs.js';
 import {
   handleFor,
   lastProjectId,
@@ -37,21 +50,31 @@ import {
 } from '../domain/model/factories.js';
 import { unionsOf, partnerIn, mediaOf } from '../domain/graph/queries.js';
 
-export { recentProjects };
+export { recentProjects, storageMode, StorageMode, isBrowserStorage, storageEstimate };
 
 // --- Project lifecycle -----------------------------------------------------
 
-/** Creates a project in a folder chosen by the user. Requires a user gesture. */
+/**
+ * Creates a project.
+ *
+ * On disk the user chooses the folder; in browser storage one is made for them,
+ * because there is nothing to choose. Requires a user gesture either way.
+ */
 export async function newProject(title) {
-  const dirHandle = await pickDirectory();
+  const dirHandle = await newDirectory(title);
   if (!dirHandle) return { ok: false, cancelled: true };
 
   const project = await createProjectIn(dirHandle, title);
   await store.adoptNew(project, dirHandle);
+
+  // Asked for at the moment the first archive is created, which is the only
+  // point where the user has visibly committed something worth keeping.
+  if (isBrowserStorage()) await requestPersistence();
+
   return { ok: true };
 }
 
-/** Opens an existing project. Requires a user gesture. */
+/** Opens an existing project from a folder on disk. DISK mode only. */
 export async function openProject() {
   const dirHandle = await pickDirectory();
   if (!dirHandle) return { ok: false, cancelled: true };
@@ -59,6 +82,42 @@ export async function openProject() {
   await store.open(dirHandle);
   return { ok: true };
 }
+
+// --- Browser storage -------------------------------------------------------
+
+/**
+ * The archives held in browser storage.
+ *
+ * In DISK mode this is always empty and the welcome screen offers the folder
+ * picker instead: a folder the user chose is theirs to find again.
+ */
+export async function listBrowserProjects() {
+  return isBrowserStorage() ? browserProjects() : [];
+}
+
+/** Opens one of them by folder name. */
+export async function openBrowserProject(name) {
+  const dirHandle = await browserFolder(name);
+  if (!dirHandle) return { ok: false, reason: 'missing' };
+
+  await store.open(dirHandle);
+  return { ok: true };
+}
+
+/**
+ * Deletes an archive from browser storage, permanently.
+ *
+ * There is no file manager behind this and no recycle bin in front of it, so
+ * the caller is expected to have asked first. Closing the project comes before
+ * the delete: writing to a folder that is being removed is a race.
+ */
+export async function deleteBrowserProject(name) {
+  if (store.isOpen) store.close(); // flushes any pending save before the folder goes
+  await removeBrowserFolder(name);
+  return { ok: true };
+}
+
+export { requestPersistence };
 
 /**
  * Reopens the last project using the stored handle.

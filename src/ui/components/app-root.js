@@ -24,6 +24,30 @@ import './menu-button.js';
 
 const styles = sheet(css);
 
+const STORAGE_NOTICE_KEY = 'ancestree.browserStorageExplained';
+
+/** The last save, in the reader's own date format. Empty if never recorded. */
+function formatSaved(iso) {
+  if (!iso) return '';
+  const when = new Date(iso);
+  if (Number.isNaN(when.getTime())) return '';
+  return new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(when);
+}
+
+/** Rounded to whatever unit keeps the number readable. */
+function formatBytes(bytes) {
+  const mb = bytes / 1e6;
+  const unit = mb < 1 ? 'kilobyte' : mb < 1000 ? 'megabyte' : 'gigabyte';
+  const value = mb < 1 ? bytes / 1e3 : mb < 1000 ? mb : mb / 1000;
+
+  return new Intl.NumberFormat(locale, {
+    style: 'unit',
+    unit,
+    unitDisplay: 'short',
+    maximumFractionDigits: value < 10 ? 1 : 0,
+  }).format(value);
+}
+
 export class AppRoot extends HTMLElement {
   #main;
   #surface;
@@ -35,6 +59,8 @@ export class AppRoot extends HTMLElement {
   #depth = {};
   #focal;
   #search;
+  #storage = null;
+  #storageExplained = false;
   #tree = null;
   #editor = null;
   #importer = null;
@@ -169,8 +195,70 @@ export class AppRoot extends HTMLElement {
         this.#toolbar,
         el('div', { class: 'spacer' }),
         this.#search,
+        this.#storageBadge(),
         this.#status,
       ],
+    });
+  }
+
+  /**
+   * Where the archive is being kept, when the answer is "not on your disk".
+   *
+   * A standing label rather than a one-off warning: the difference between the
+   * two storage modes is permanent, so a notice that can be dismissed and
+   * forgotten is not enough. Pressing it explains the consequences in full.
+   */
+  #storageBadge() {
+    if (!actions.isBrowserStorage()) return null;
+
+    this.#storage = el('button', {
+      class: 'badge',
+      text: S.browserStorage.badge,
+      attrs: { type: 'button', title: S.browserStorage.title },
+    });
+
+    this.#storage.addEventListener('click', () => void this.#explainStorage());
+    return this.#storage;
+  }
+
+  /**
+   * The same explanation, unprompted, the first time an archive is opened on
+   * this device — and only the first time. After that the badge carries it: a
+   * warning repeated every session stops being read by session three.
+   */
+  #maybeExplainStorage() {
+    if (!actions.isBrowserStorage() || this.#storageExplained) return;
+    this.#storageExplained = true;
+
+    try {
+      if (localStorage.getItem(STORAGE_NOTICE_KEY)) return;
+      localStorage.setItem(STORAGE_NOTICE_KEY, '1');
+    } catch {
+      // A browser refusing localStorage is a browser likely to drop the archive
+      // as well, so failing to remember means showing it, not hiding it.
+    }
+
+    void this.#explainStorage();
+  }
+
+  async #explainStorage() {
+    const [persisted, estimate] = await Promise.all([
+      actions.requestPersistence(),
+      actions.storageEstimate(),
+    ]);
+
+    this.#notices.show({
+      severity: 'warning',
+      title: S.browserStorage.title,
+      detail: [
+        S.browserStorage.body,
+        S.browserStorage.advice,
+        persisted ? S.browserStorage.persisted : S.browserStorage.notPersisted,
+        estimate ? S.browserStorage.usage(formatBytes(estimate.usage)) : '',
+        persisted ? '' : S.browserStorage.installHint,
+      ]
+        .filter(Boolean)
+        .join(' '),
     });
   }
 
@@ -530,9 +618,16 @@ export class AppRoot extends HTMLElement {
     this.#syncToolbar();
 
     if (!store.isOpen) {
-      void this.#showWelcome();
+      // Never `void`: a rejection here used to leave a blank page and no trace
+      // of why, because the only screen the user could have reached was the one
+      // that failed to build.
+      this.#showWelcome().catch((error) =>
+        this.#notices.show({ severity: 'error', title: error?.message ?? String(error) }),
+      );
       return;
     }
+
+    this.#maybeExplainStorage();
 
     if (store.focalPersonId === null) {
       this.#showEmptyProject();
@@ -550,7 +645,11 @@ export class AppRoot extends HTMLElement {
     });
   };
 
-  async #showWelcome() {
+  #showWelcome() {
+    return actions.isBrowserStorage() ? this.#showBrowserWelcome() : this.#showDiskWelcome();
+  }
+
+  async #showDiskWelcome() {
     const last = await actions.lastProjectSummary();
 
     const buttons = [
@@ -587,6 +686,104 @@ export class AppRoot extends HTMLElement {
         ],
       }),
     );
+  }
+
+  /**
+   * The welcome screen where there is no folder picker.
+   *
+   * With no filesystem to point at, the app has to be the thing that remembers
+   * what archives exist — so this screen is a list rather than three buttons,
+   * and it is read from the folders themselves, not from a cache.
+   *
+   * It also has to say where the data actually is. Somebody who thinks their
+   * research is on their phone the way a photograph is on their phone will not
+   * think to export, and that is exactly who loses it.
+   */
+  async #showBrowserWelcome() {
+    const projects = await actions.listBrowserProjects();
+
+    const name = el('input', {
+      class: 'name',
+      attrs: {
+        type: 'text',
+        placeholder: S.welcome.defaultName,
+        'aria-label': S.welcome.newProject,
+        maxlength: '60',
+        autocomplete: 'off',
+      },
+    });
+
+    const create = el('button', {
+      class: 'primary',
+      text: S.welcome.newProject,
+      attrs: { type: 'button' },
+    });
+    create.addEventListener('click', () =>
+      this.#run(() => actions.newProject(name.value.trim() || S.welcome.defaultName)),
+    );
+
+    const importZip = el('button', { text: S.welcome.importArchive, attrs: { type: 'button' } });
+    importZip.addEventListener('click', () => this.#startImport());
+
+    clear(this.#surface).append(
+      el('div', {
+        // Two names, two entries: el() hands the list to classList.add, which
+        // throws on a string with a space in it.
+        class: ['screen', 'listing'],
+        children: [
+          el('h2', { text: S.app.name }),
+          el('p', { text: S.app.tagline }),
+          el('p', { class: 'hint', text: S.welcome.browserHint }),
+          this.#message ? el('p', { class: 'error', text: this.#message }) : null,
+
+          projects.length > 0 ? el('h3', { text: S.welcome.archives }) : null,
+          projects.length > 0
+            ? el('ul', {
+                class: 'archives',
+                children: projects.map((project) => this.#archiveRow(project)),
+              })
+            : el('p', { text: S.welcome.noArchives }),
+
+          el('div', {
+            class: 'actions',
+            children: [
+              el('div', { class: 'named', children: [name, create] }),
+              importZip,
+            ],
+          }),
+        ],
+      }),
+    );
+  }
+
+  #archiveRow({ name, title, persons, savedAt }) {
+    const open = el('button', {
+      class: 'archive',
+      attrs: { type: 'button' },
+      children: [
+        el('b', { text: title }),
+        el('span', {
+          class: 'meta',
+          text: S.welcome.archiveMeta(persons, formatSaved(savedAt)),
+        }),
+      ],
+    });
+    open.addEventListener('click', () => this.#run(() => actions.openBrowserProject(name)));
+
+    const remove = el('button', {
+      class: 'danger',
+      text: S.welcome.deleteArchive,
+      attrs: { type: 'button', 'aria-label': S.welcome.deleteArchiveLabel(title) },
+    });
+
+    // A native confirm, on purpose. This is the only action in the app with no
+    // undo behind it and, in browser storage, quite possibly no copy either.
+    remove.addEventListener('click', () => {
+      if (!globalThis.confirm(S.welcome.confirmDelete(title))) return;
+      void this.#run(() => actions.deleteBrowserProject(name));
+    });
+
+    return el('li', { children: [open, remove] });
   }
 
   #showEmptyProject() {
@@ -641,14 +838,22 @@ export class AppRoot extends HTMLElement {
       if (result?.ok === false && result.reason === 'denied') {
         this.#message = S.welcome.deniedFolder;
       } else if (result?.ok === false && result.reason === 'missing') {
-        this.#message = S.welcome.missingFolder;
+        // In browser storage there is no folder to go and find again, so the
+        // advice to choose it once more would be nonsense.
+        this.#message = actions.isBrowserStorage()
+          ? S.welcome.missingArchive
+          : S.welcome.missingFolder;
       }
     } catch (error) {
       // The UI catches at the edge and turns failures into something
       // actionable. A raw stack trace is never shown.
       this.#message = error?.message ?? String(error);
     }
-    if (!store.isOpen) void this.#showWelcome();
+    if (!store.isOpen) {
+      await this.#showWelcome().catch((error) => {
+        this.#message = error?.message ?? String(error);
+      });
+    }
   }
 }
 

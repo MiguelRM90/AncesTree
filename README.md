@@ -3,7 +3,7 @@
 
 # AncesTree
 
-A family tree that lives on your own computer.
+A family tree you keep yourself.
 
 Build and keep a family's genealogical archive in the browser. No accounts, no
 subscription, no backend: **the data never leaves your machine**. When you want
@@ -17,13 +17,15 @@ to share it with a relative, you hand them a folder or a ZIP.
 ## How it works
 
     Code         public   (this repository)
-    Data         private  (your disk)
+    Data         private  (your device)
     Application  a static web page
     Backend      none
 
 The application is a few hundred kilobytes served from GitHub Pages and
-installable as a PWA, so it runs offline afterwards. Your archive is an ordinary
-folder you can see, back up and compress with the tools you already use.
+installable as a PWA, so it runs offline afterwards. On a desktop your archive is
+an ordinary folder you can see, back up and compress with the tools you already
+use; on a phone the browser keeps it for you and you export a ZIP to take a copy
+out. Either way it has the same shape:
 
 ```
 FamilyName/
@@ -43,8 +45,10 @@ Zipping that folder produces a file another relative can open and carry on with.
 
 - **Privacy by construction.** There is no server to send anything to. The code
   is public and auditable.
-- **No practical limit on photographs.** Binaries go to your disk, not to a
-  browser storage quota.
+- **No practical limit on photographs** on the desktop: binaries go to your
+  disk rather than to a browser storage quota.
+- **Runs on a phone too**, keeping the archive in browser storage where there is
+  no folder to pick — and saying so plainly, because that storage is weaker.
 - **Dates as they really are**: *about 1885*, *May 1912*, *before 1900*,
   *between 1900 and 1905* — with validation that understands uncertainty
   instead of demanding precision nobody has.
@@ -63,18 +67,34 @@ Zipping that folder produces a file another relative can open and carry on with.
 
 ---
 
-## Requirements
+## Where your archive is kept
 
-**Chrome, Edge, Opera, Brave or Vivaldi, on a desktop computer.**
+There are two storage modes, chosen by what the browser can do — never by
+sniffing which browser it is.
 
-The app uses the File System Access API to work directly on a folder of your
-disk with no size limit. That API does not exist in Firefox, in Safari, or in
-any mobile browser, so there the app shows a requirements screen instead of
-starting.
+**On a desktop Chromium browser** (Chrome, Edge, Opera, Brave, Vivaldi) the
+archive is **a folder you pick on your own disk**, through the File System
+Access API. No size limit beyond the disk itself. You can see it in your file
+manager, back it up and zip it with the tools you already use. This is the mode
+the app prefers wherever it is available.
 
-That is deliberate. Storing somebody's family archive in a place the browser
-may clear to reclaim space is not acceptable, and a half-working fallback would
-be worse than an honest refusal.
+**Everywhere else** — Firefox, Safari, and every mobile browser — the archive is
+kept in **storage the browser owns**. Everything works: editing, photographs,
+search, import and export. But that storage is not a folder you can see, it goes
+if you clear site data, and some browsers discard it after a few weeks without a
+visit. The app says so, in the header and the first time you open an archive.
+
+> On a phone, **export a ZIP now and again and keep it somewhere you chose.**
+> That copy is the one that is really yours. Adding AncesTree to your home
+> screen also makes the browser far less likely to discard its storage.
+
+Either way the archive has the same shape, and a ZIP written on a phone opens on
+a desktop and the other way round.
+
+If the browser cannot do either — or cannot write files in chunks, which older
+Safari could not — the app shows a requirements screen rather than starting.
+A family archive app that sometimes loses the data is worse than one that
+refuses to open.
 
 ---
 
@@ -83,7 +103,7 @@ be worse than an honest refusal.
 ```bash
 npm install
 npm run dev      # http://localhost:5173/AncesTree/
-npm test         # 211 tests, in a real browser
+npm test         # 226 tests, in a real browser
 npm run lint
 npm run build    # dist/, ready for GitHub Pages
 ```
@@ -109,7 +129,7 @@ mean something. Open the folder it writes with **Open a folder**.
 ```
 src/
 ├─ domain/     pure functions: model, dates, graph, validation, layout, GEDCOM
-├─ storage/    disk and IndexedDB
+├─ storage/    disk, browser storage, ZIP, IndexedDB
 ├─ store/      state, mutations, events
 └─ ui/         Web Components
 ```

@@ -12,7 +12,9 @@
 
 import { createMediaObject, MediaKind } from '../domain/model/factories.js';
 import { parseDate } from '../domain/date/parse.js';
-import { PHOTOS_DIR, StorageError } from './project-store.js';
+import { StorageError } from './error.js';
+import { openFiles } from './file-dialog.js';
+import { PHOTOS_DIR } from './names.js';
 import { MAX_PHOTO_BYTES } from '../config/limits.js';
 
 /**
@@ -37,15 +39,15 @@ const IMAGE_TYPES = [
   },
 ];
 
-/** Opens the picker for one or more photos. Requires a user gesture. */
-export async function pickImages() {
-  try {
-    const handles = await window.showOpenFilePicker({ types: IMAGE_TYPES, multiple: true });
-    return Promise.all(handles.map((handle) => handle.getFile()));
-  } catch (cause) {
-    if (cause.name === 'AbortError') return [];
-    throw new StorageError('PICKER_FAILED', 'Could not open the file picker', cause);
-  }
+/**
+ * Opens the picker for one or more photos. Requires a user gesture.
+ *
+ * On a phone the fallback input offers the camera alongside the gallery, which
+ * is how a photograph of a photograph gets into the archive without a computer
+ * anywhere in the chain.
+ */
+export function pickImages() {
+  return openFiles({ types: IMAGE_TYPES });
 }
 
 /** @returns {{mime: string, ext: string}|null} */
