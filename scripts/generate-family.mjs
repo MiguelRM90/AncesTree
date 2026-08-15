@@ -87,6 +87,12 @@ const MALE_NAMES = ['Antonio', 'José', 'Manuel', 'Francisco', 'Juan', 'Luis', '
 const FEMALE_NAMES = ['María', 'Carmen', 'Josefa', 'Isabel', 'Dolores', 'Pilar', 'Teresa', 'Rosa', 'Concepción', 'Encarnación', 'Mercedes', 'Antonia', 'Manuela', 'Rosario', 'Julia'];
 const SURNAMES = ['García', 'Fernández', 'Rodríguez', 'Martínez', 'Sánchez', 'Pérez', 'Gómez', 'Martín', 'Jiménez', 'Ruiz', 'Hernández', 'Díaz', 'Moreno', 'Álvarez', 'Romero', 'Navarro', 'Torres', 'Domínguez', 'Gil', 'Vázquez'];
 const PLACES = ['Cuenca', 'Toledo', 'Ávila', 'Segovia', 'Soria', 'Teruel', 'Zamora', 'Palencia', 'Huesca', 'Lugo'];
+
+/**
+ * Mostly Spanish, with the emigration a real archive from these provinces
+ * would show: Argentina, Cuba, Mexico, France, Germany.
+ */
+const NATIONALITIES = ['ES', 'ES', 'ES', 'ES', 'ES', 'ES', 'ES', 'ES', 'AR', 'CU', 'MX', 'FR', 'DE'];
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
 const GENERATION_YEARS = 28;
@@ -145,6 +151,7 @@ function makePerson(generation, sex, surnames, { minLifespan = 0 } = {}) {
     lastName: surnames?.first ?? pick(SURNAMES),
     secondLastName: surnames?.second ?? pick(SURNAMES),
     sex,
+    nationality: chance(0.9) ? pick(NATIONALITIES) : '',
     birth: event(birthYear),
     death: stillLiving ? null : event(deathYear),
     notes: chance(0.06) ? 'Recorded from the parish register.' : '',

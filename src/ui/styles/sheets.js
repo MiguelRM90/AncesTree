@@ -17,6 +17,7 @@
  */
 
 import baseCss from './base.css?inline';
+import flagsCss from './flags.css?inline';
 
 /** @param {string} css  the text of a stylesheet */
 export function sheet(css) {
@@ -26,3 +27,6 @@ export function sheet(css) {
 }
 
 export const base = sheet(baseCss);
+
+/** Country swatches, adopted only where a nationality is shown. */
+export const flags = sheet(flagsCss);

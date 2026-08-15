@@ -14,15 +14,18 @@ import { Crc32 } from './zip/crc32.js';
 import {
   FAMILY_FILE,
   MANIFEST_FILE,
+  PHOTOS_DIR,
+  DOCUMENTS_DIR,
   BACKUPS_DIR,
   StorageError,
   buildManifest,
   loadProject,
+  writeProject,
 } from './project-store.js';
 import { parseProject } from '../domain/model/schema.js';
-import { SCHEMA_VERSION } from '../domain/model/factories.js';
 import { exportGedcom } from '../domain/gedcom/export.js';
-import { MAX_ZIP_ENTRIES, MAX_UNZIPPED_BYTES } from '../config/limits.js';
+import { importGedcom } from '../domain/gedcom/import.js';
+import { MAX_ZIP_ENTRIES, MAX_UNZIPPED_BYTES, MAX_GEDCOM_BYTES } from '../config/limits.js';
 
 export const GEDCOM_FILE = 'family.ged';
 
@@ -41,6 +44,47 @@ export async function writeGedcom(dirHandle, project) {
   const writable = await handle.createWritable();
   await writable.write(exportGedcom(project));
   await writable.close();
+}
+
+/**
+ * Reads a .ged the user picks and turns it into a project, without writing
+ * anything. The caller shows the summary and decides what to do with it.
+ */
+export async function pickAndReadGedcom() {
+  let file;
+  try {
+    const [handle] = await window.showOpenFilePicker({ types: GEDCOM_TYPES, multiple: false });
+    file = await handle.getFile();
+  } catch (cause) {
+    if (cause.name === 'AbortError') return null;
+    throw new StorageError('PICKER_FAILED', 'Could not open the file picker', cause);
+  }
+
+  if (file.size > MAX_GEDCOM_BYTES) {
+    throw new StorageError('TOO_LARGE', 'That GEDCOM is larger than the allowed maximum');
+  }
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const result = importGedcom(decodeGedcom(bytes), { title: file.name.replace(/\.ged$/i, '') });
+
+  if (result.counts.persons === 0) {
+    throw new StorageError('EMPTY_GEDCOM', 'No people found in that file');
+  }
+
+  return { ...result, fileName: file.name };
+}
+
+/**
+ * GEDCOM 7 is UTF-8; 5.5.1 also allowed ANSEL and Latin-1, and files in the
+ * wild still are. ANSEL is an encoding from the 1980s that no browser decodes,
+ * so it is read as Latin-1 — the least wrong approximation — and reported.
+ */
+function decodeGedcom(bytes) {
+  const head = new TextDecoder('utf-8').decode(bytes.slice(0, 4096));
+  const declared = /\n1 CHAR (\S+)/.exec(head)?.[1]?.toUpperCase() ?? 'UTF-8';
+
+  const label = declared === 'UTF-8' || declared === 'UNICODE' ? 'utf-8' : 'windows-1252';
+  return new TextDecoder(label).decode(bytes);
 }
 
 /** Exports a standalone .ged to wherever the user chooses. Requires a gesture. */
@@ -166,13 +210,6 @@ export async function inspectArchive(file) {
   }
 
   const manifest = await readJsonEntry(archive, MANIFEST_FILE);
-  if (manifest && manifest.schemaVersion > SCHEMA_VERSION) {
-    throw new StorageError(
-      'FUTURE_VERSION',
-      `This archive was created with a newer version of AncesTree (schema v${manifest.schemaVersion}).`,
-    );
-  }
-
   const parsed = parseProject(new TextDecoder().decode(await archive.bytes(familyEntry)));
   if (!parsed.ok) {
     throw new StorageError('INVALID_PROJECT', parsed.errors.map((e) => e.message).join('; '));
@@ -190,6 +227,33 @@ export async function inspectArchive(file) {
       bytes: archive.totalBytes,
     },
   };
+}
+
+/**
+ * Writes an already-built project into a folder the user picks.
+ *
+ * Used by the GEDCOM import: a .ged carries no photos, so there is nothing to
+ * extract — only a graph to save somewhere.
+ */
+export async function createProjectFrom(project) {
+  let dirHandle;
+  try {
+    dirHandle = await window.showDirectoryPicker({ mode: 'readwrite', id: 'ancestree-import' });
+  } catch (cause) {
+    if (cause.name === 'AbortError') return { ok: false, cancelled: true };
+    throw new StorageError('PICKER_FAILED', 'Could not open the folder picker', cause);
+  }
+
+  if (await hasEntry(dirHandle, FAMILY_FILE)) {
+    throw new StorageError('NOT_EMPTY', 'That folder already contains an AncesTree project');
+  }
+
+  await dirHandle.getDirectoryHandle(PHOTOS_DIR, { create: true });
+  await dirHandle.getDirectoryHandle(DOCUMENTS_DIR, { create: true });
+  await dirHandle.getDirectoryHandle(BACKUPS_DIR, { create: true });
+
+  const saved = await writeProject(dirHandle, project);
+  return { ok: true, project: saved, dirHandle };
 }
 
 /**

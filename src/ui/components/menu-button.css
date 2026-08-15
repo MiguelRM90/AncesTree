@@ -1,0 +1,58 @@
+:host {
+  position: relative;
+  display: inline-block;
+}
+
+/* The caret says this opens something, so the label does not have to. */
+.trigger::after {
+  content: '';
+  display: inline-block;
+  margin-left: var(--s-2);
+  border: 4px solid transparent;
+  border-top-color: currentColor;
+  transform: translateY(2px);
+}
+
+.menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + var(--s-1));
+  left: 0;
+  min-width: 100%;
+  width: max-content;
+  margin: 0;
+  padding: var(--s-1);
+  list-style: none;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 1px;
+}
+
+.menu[hidden] {
+  display: none;
+}
+
+.menu button {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: none;
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+.menu button:hover,
+.menu button:focus-visible {
+  background: var(--c-accent-soft);
+  border: 0;
+}
+
+hr {
+  margin: var(--s-1) 0;
+  border: 0;
+  border-top: 1px solid var(--c-border-subtle);
+}

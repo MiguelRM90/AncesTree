@@ -9,6 +9,7 @@ import {
   Severity,
 } from '../src/domain/validation/engine.js';
 import { describeIssue, issueLine } from '../src/ui/issue-text.js';
+import { S } from '../src/config/strings.js';
 import { createParentChild, createUnion, Sex } from '../src/domain/model/factories.js';
 import { parseDate } from '../src/domain/date/parse.js';
 import { minimalFamily, person, project } from './fixtures/families.js';
@@ -285,7 +286,9 @@ describe('issue text', () => {
 
     const { title, detail } = describeIssue(blocking, graph);
 
-    expect(title).to.equal('This parent was born after their child.');
+    // Compared against the active dictionary, not a hardcoded English string:
+    // the interface follows the reader's language, and so does this.
+    expect(title).to.equal(S.validation.parentBornAfterChild);
     expect(detail).to.equal('Parent Doe · Child Doe');
     expect(issueLine(blocking, graph)).to.equal(`${title} (${detail})`);
   });
@@ -329,7 +332,7 @@ describe('issue text', () => {
     const blocking = validateAll(graph).find((i) => i.ruleId === 'PARENT_BORN_AFTER_CHILD');
 
     expect(describeIssue(blocking).detail).to.equal('');
-    expect(issueLine(blocking)).to.equal('This parent was born after their child.');
+    expect(issueLine(blocking)).to.equal(S.validation.parentBornAfterChild);
   });
 });
 

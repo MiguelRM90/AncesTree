@@ -7,9 +7,10 @@ dist/
 # Generated stress-test projects. The generator is committed, its output is not.
 stress-*/
 
-# Design docs are written in Spanish and stay local: they are the working
-# specification, not part of the published site.
+# The working specification is written in Spanish and stays local. README.md is
+# the one document that ships, and it is in English.
 *.md
+!README.md
 vision.txt
 
 # Never, under any circumstance, real family data in the repository.

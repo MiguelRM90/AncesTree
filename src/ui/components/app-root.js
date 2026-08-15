@@ -9,7 +9,7 @@
 import { el, clear, setChildren } from '../dom.js';
 import { base, sheet } from '../styles/sheets.js';
 import css from './app-root.css?inline';
-import { S } from '../../config/strings.js';
+import { S, LOCALES, locale, setLocale } from '../../config/strings.js';
 import { describeIssue } from '../issue-text.js';
 import { mediaOf, displayName } from '../../domain/graph/queries.js';
 import { store } from '../../store/store.js';
@@ -19,11 +19,15 @@ import './person-editor.js';
 import './import-dialog.js';
 import './app-notice.js';
 import './person-search.js';
+import './review-panel.js';
+import './menu-button.js';
 
 const styles = sheet(css);
 
 export class AppRoot extends HTMLElement {
   #main;
+  #surface;
+  #menus = [];
   #status;
   #toolbar;
   #notices;
@@ -34,6 +38,7 @@ export class AppRoot extends HTMLElement {
   #tree = null;
   #editor = null;
   #importer = null;
+  #review = null;
   #pendingImport = null;
   #message = '';
 
@@ -53,7 +58,11 @@ export class AppRoot extends HTMLElement {
     this.#focal = el('span', { class: 'focal' });
     this.#search = document.createElement('person-search');
 
-    this.#main = el('main');
+    // The stage does not scroll; the surface inside it does. That is what lets
+    // the "centred on" label sit over the tree instead of scrolling away with
+    // it.
+    this.#surface = el('div', { class: 'surface' });
+    this.#main = el('main', { children: [this.#surface, this.#focal] });
     this.#notices = document.createElement('app-notice');
 
     root.append(this.#header(), this.#main, this.#notices);
@@ -73,6 +82,7 @@ export class AppRoot extends HTMLElement {
     this.addEventListener('import:merge', this.#onImportMerge);
     this.addEventListener('import:new', this.#onImportNew);
     this.addEventListener('person:reveal', this.#onPersonReveal);
+    this.addEventListener('menu:open', this.#onMenuOpen);
     this.addEventListener('photos:add', this.#onPhotosAdd);
     this.addEventListener('photo:portrait', this.#onPhotoPortrait);
     this.addEventListener('photo:remove', this.#onPhotoRemove);
@@ -94,6 +104,7 @@ export class AppRoot extends HTMLElement {
     this.removeEventListener('import:merge', this.#onImportMerge);
     this.removeEventListener('import:new', this.#onImportNew);
     this.removeEventListener('person:reveal', this.#onPersonReveal);
+    this.removeEventListener('menu:open', this.#onMenuOpen);
     this.removeEventListener('photos:add', this.#onPhotosAdd);
     this.removeEventListener('photo:portrait', this.#onPhotoPortrait);
     this.removeEventListener('photo:remove', this.#onPhotoRemove);
@@ -120,20 +131,33 @@ export class AppRoot extends HTMLElement {
       children: [
         make('back', S.toolbar.back, () => store.goBack()),
         make('edit', S.toolbar.edit, () => this.#editFocal()),
-        el('div', { class: 'divider' }),
-        make('addParent', S.toolbar.addParent, () => this.#add(actions.addParentFor)),
-        make('addPartner', S.toolbar.addPartner, () => this.#add(actions.addPartnerFor)),
-        make('addChild', S.toolbar.addChild, () => this.#add(actions.addChildFor)),
+
+        // Two families of actions behind one label each. Eleven buttons in a
+        // row was a wall; this is the same reach, one click deeper.
+        this.#menu(S.toolbar.add, [
+          { label: S.toolbar.addParent, action: () => this.#add(actions.addParentFor) },
+          { label: S.toolbar.addPartner, action: () => this.#add(actions.addPartnerFor) },
+          { label: S.toolbar.addChild, action: () => this.#add(actions.addChildFor) },
+        ]),
+
         el('div', { class: 'divider' }),
         make('undo', S.toolbar.undo, () => store.undo()),
         make('redo', S.toolbar.redo, () => store.redo()),
         el('div', { class: 'divider' }),
-        make('export', S.toolbar.exportZip, () => this.#exportArchive()),
-        make('import', S.toolbar.importZip, () => this.#startImport()),
-        make('gedcom', S.toolbar.exportGedcom, () => this.#exportGedcom()),
+        make('review', S.toolbar.review, () => this.#openReview()),
+
+        this.#menu(S.toolbar.transfer, [
+          { label: S.toolbar.exportZip, action: () => this.#exportArchive() },
+          { label: S.toolbar.importZip, action: () => this.#startImport() },
+          { label: S.toolbar.exportGedcom, action: () => this.#exportGedcom(), separatorBefore: true },
+          { label: S.toolbar.importGedcom, action: () => this.#importGedcom() },
+        ]),
+
         el('div', { class: 'divider' }),
         this.#depthPicker('up', S.toolbar.ancestors, S.toolbar.generationsUp),
         this.#depthPicker('down', S.toolbar.descendants, S.toolbar.generationsDown),
+        el('div', { class: 'divider' }),
+        this.#languagePicker(),
       ],
     });
 
@@ -145,10 +169,46 @@ export class AppRoot extends HTMLElement {
         this.#toolbar,
         el('div', { class: 'spacer' }),
         this.#search,
-        this.#focal,
         this.#status,
       ],
     });
+  }
+
+  #onMenuOpen = (event) => {
+    for (const menu of this.#menus) {
+      if (menu !== event.detail.source) menu.close();
+    }
+  };
+
+  /** One open menu at a time. */
+  #menu(label, items) {
+    const menu = document.createElement('menu-button');
+    menu.label = label;
+    menu.items = items;
+    this.#menus.push(menu);
+    return menu;
+  }
+
+  /**
+   * The language of the interface, not of the archive.
+   *
+   * Changing it reloads the page: several components build their labels once,
+   * when they are created, so repainting in place would leave some of them in
+   * the old language.
+   */
+  #languagePicker() {
+    const select = document.createElement('select');
+    select.setAttribute('aria-label', S.toolbar.language);
+    select.title = S.toolbar.language;
+
+    for (const { code, label } of LOCALES) {
+      select.append(el('option', { text: label, attrs: { value: code } }));
+    }
+
+    select.value = locale;
+    select.addEventListener('change', () => setLocale(select.value));
+
+    return el('label', { class: 'depth', children: [select] });
   }
 
   /** How many generations are drawn in one direction. */
@@ -371,6 +431,44 @@ export class AppRoot extends HTMLElement {
   }
 
   /**
+   * A GEDCOM is read whole and turned into a project in memory, then saved
+   * into a folder of its own. It never merges into an open archive: the ids in
+   * a foreign file mean nothing here, so everything would arrive as a
+   * duplicate.
+   */
+  #importGedcom() {
+    void this.#guarded(async () => {
+      const result = await actions.beginGedcomImport();
+      if (!result) return;
+
+      const saved = await actions.finishGedcomImport(result);
+      if (saved.cancelled) return;
+
+      const detail = [
+        result.warnings.length > 0 ? S.archive.gedcomWarnings(result.warnings.length) : '',
+        result.encoding !== 'UTF-8' ? S.archive.gedcomEncoding(result.encoding) : '',
+        result.counts.media > 0 ? S.archive.gedcomPhotos : '',
+      ]
+        .filter(Boolean)
+        .join(' · ');
+
+      this.#notices.show({
+        severity: result.warnings.length > 0 ? 'warning' : 'success',
+        title: S.archive.gedcomRead(result.counts),
+        detail,
+      });
+    });
+  }
+
+  #openReview() {
+    if (!this.#review) {
+      this.#review = document.createElement('review-panel');
+      this.shadowRoot.append(this.#review);
+    }
+    this.#review.open(store.issues, store.graph);
+  }
+
+  /**
    * Import happens in two steps: read what is inside the archive, then let the
    * user pick the strategy. Nothing is written before that choice.
    */
@@ -442,7 +540,7 @@ export class AppRoot extends HTMLElement {
     }
 
     if (!this.#tree) this.#tree = document.createElement('tree-canvas');
-    if (this.#main.firstElementChild !== this.#tree) clear(this.#main).append(this.#tree);
+    if (this.#surface.firstElementChild !== this.#tree) clear(this.#surface).append(this.#tree);
 
     this.#tree.render({
       graph: store.graph,
@@ -477,7 +575,7 @@ export class AppRoot extends HTMLElement {
       buttons.push(reopen);
     }
 
-    clear(this.#main).append(
+    clear(this.#surface).append(
       el('div', {
         class: 'screen',
         children: [
@@ -503,7 +601,7 @@ export class AppRoot extends HTMLElement {
       if (result.ok) this.#editPerson(result.person.id);
     });
 
-    clear(this.#main).append(
+    clear(this.#surface).append(
       el('div', {
         class: 'screen',
         children: [
@@ -516,7 +614,7 @@ export class AppRoot extends HTMLElement {
 
   #showUnsupported({ missing = [], fileProtocol = false } = {}) {
     this.#toolbar.hidden = true;
-    clear(this.#main).append(
+    clear(this.#surface).append(
       el('div', {
         class: 'screen',
         children: [

@@ -19,10 +19,12 @@ import {
 import {
   exportProject,
   exportGedcomFile,
+  pickAndReadGedcom,
   pickArchive,
   inspectArchive,
   importAsNewProject,
   importByMerging,
+  createProjectFrom,
 } from '../storage/archive.js';
 import { pickImages, importPhoto } from '../storage/media.js';
 import { release } from '../storage/media-cache.js';
@@ -112,6 +114,21 @@ export function exportArchive() {
 export function exportGedcom() {
   if (!store.isOpen) return Promise.resolve({ ok: false, reason: 'none' });
   return exportGedcomFile(store.project);
+}
+
+/**
+ * Reads a GEDCOM into a project without writing anything, so the caller can
+ * show what arrived before committing to it.
+ */
+export function beginGedcomImport() {
+  return pickAndReadGedcom();
+}
+
+/** Saves an imported GEDCOM into a folder of its own and opens it. */
+export async function finishGedcomImport(result) {
+  const saved = await createProjectFrom(result.project);
+  if (saved.ok) await store.adoptNew(saved.project, saved.dirHandle);
+  return { ...saved, warnings: result.warnings, counts: result.counts };
 }
 
 /**

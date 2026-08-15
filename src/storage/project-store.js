@@ -6,7 +6,7 @@
  */
 
 import { parseProject, validateProject } from '../domain/model/schema.js';
-import { createProject, APP_VERSION, SCHEMA_VERSION } from '../domain/model/factories.js';
+import { createProject, APP_VERSION } from '../domain/model/factories.js';
 import { MAX_JSON_BYTES, BACKUP_COPIES } from '../config/limits.js';
 
 export const FAMILY_FILE = 'family.json';
@@ -51,18 +51,13 @@ export async function createProjectIn(dirHandle, title) {
 /**
  * Loads an existing project.
  *
- * manifest.json is read FIRST: it validates the version and detects a folder
- * that is not ours without reading the whole graph.
+ * A folder without family.json is not one of ours, which is the only check
+ * that matters while the schema is still being designed.
  */
 export async function loadProject(dirHandle) {
-  const manifest = await readManifest(dirHandle);
-  if (manifest && manifest.schemaVersion > SCHEMA_VERSION) {
-    throw new StorageError(
-      'FUTURE_VERSION',
-      `This project was created with a newer version of AncesTree (schema v${manifest.schemaVersion}).`,
-    );
-  }
-
+  // No version check while the schema is still being designed: every field so
+  // far is additive with a safe default, so a folder written by an older build
+  // opens fine. The refusal comes back when v1 ships.
   const file = await fileIfExists(dirHandle, FAMILY_FILE);
   if (!file) throw new StorageError('NOT_A_PROJECT', 'No family.json in that folder');
 
@@ -120,16 +115,6 @@ export function buildManifest(project) {
       media: project.media.length,
     },
   };
-}
-
-async function readManifest(dirHandle) {
-  const file = await fileIfExists(dirHandle, MANIFEST_FILE);
-  if (!file) return null;
-  try {
-    return JSON.parse(await file.text());
-  } catch {
-    return null; // an unreadable manifest does not block opening: family.json wins
-  }
 }
 
 /** Rotating copy before overwriting. Keeps the last BACKUP_COPIES. */

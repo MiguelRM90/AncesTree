@@ -21,7 +21,43 @@ person-photo { grid-row: 1 / span 2; --photo-size: 2.5rem; }
 
 /* minmax(0, 1fr) above is what lets the text column actually shrink, which
    is what makes the ellipsis work inside a grid. */
-.name, .dates { grid-column: 2; }
+.line, .dates { grid-column: 2; }
+
+/* Name and flag on one line, with the flag never squeezing the name out. */
+.line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  min-width: 0;
+}
+
+.flagchip {
+  flex: 0 0 auto;
+  font-size: var(--fs-sm);
+  line-height: 1;
+}
+
+/**
+ * Where the platform has no flag glyphs, the badge draws its own — see
+ * styles/flags.css for the swatch. No frame around the whole thing: the
+ * swatch already reads as a flag, and a border round both would be two marks
+ * doing one job.
+ */
+.codechip {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  color: var(--c-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+:host([focal]) .codechip {
+  color: var(--c-text);
+}
 
 /**
  * The centred person has to be unmistakable at a glance.

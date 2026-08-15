@@ -7,7 +7,11 @@
 
 import { unknownDate } from '../date/parse.js';
 
-export const SCHEMA_VERSION = 2;
+/**
+ * Still 1, and it changes in place while the schema is being designed. See
+ * domain/model/schema.js for why there are no migrations yet.
+ */
+export const SCHEMA_VERSION = 1;
 export const APP_VERSION = '0.1.0';
 
 export const Sex = { MALE: 'M', FEMALE: 'F', UNKNOWN: 'U', OTHER: 'X' };
@@ -67,6 +71,8 @@ export function createPerson(overrides = {}) {
     secondLastName: '',
     alsoKnownAs: [],
     sex: Sex.UNKNOWN,
+    /** ISO 3166-1 alpha-2, or '' when it was never recorded. */
+    nationality: '',
     birth: null,
     death: null,
     isPlaceholder: false,

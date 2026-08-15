@@ -1,0 +1,348 @@
+/**
+ * Flags drawn in CSS.
+ *
+ * Windows ships no flag glyphs, so where the platform cannot draw one the
+ * country badge draws its own: a small swatch built from gradients, beside the
+ * two-letter code. Most national flags are bands of colour, which a gradient
+ * reproduces exactly.
+ *
+ * Two deliberate limits:
+ *
+ *  - Flags carrying a coat of arms, a canton or an emblem are drawn as their
+ *    bands alone. Spain without its arms and Mexico without its eagle are
+ *    still Spain and Mexico at fourteen pixels wide, and both exist as
+ *    official plain variants.
+ *  - Anything that cannot be drawn honestly — the Union Jack, Brazil, the
+ *    Nordic flags with off-centre crosses — gets the neutral swatch rather
+ *    than a wrong one. The code is always there to say which country it is, so
+ *    a missing drawing costs nothing; a wrong one would.
+ *
+ * Three tricolours (Russia, Slovakia, Slovenia) are the same three bands in
+ * real life too. The code beside the swatch is what tells them apart.
+ */
+
+.codechip::before {
+  content: '';
+  display: inline-block;
+  width: 1.15em;
+  height: 0.8em;
+  margin-right: 0.4em;
+  vertical-align: -0.08em;
+  border-radius: 1.5px;
+  background: var(--c-border-subtle);
+
+  /* An outline of its own, so a white or pale flag still reads as a shape on
+     either theme. */
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 30%);
+}
+
+/* --- Horizontal bands ---------------------------------------------------- */
+
+.codechip[data-country='DE']::before {
+  background: linear-gradient(#000 0 33.3%, #dd0000 33.3% 66.6%, #ffce00 66.6%);
+}
+.codechip[data-country='NL']::before {
+  background: linear-gradient(#ae1c28 0 33.3%, #fff 33.3% 66.6%, #21468b 66.6%);
+}
+.codechip[data-country='RU']::before,
+.codechip[data-country='SK']::before,
+.codechip[data-country='SI']::before {
+  background: linear-gradient(#fff 0 33.3%, #0039a6 33.3% 66.6%, #d52b1e 66.6%);
+}
+.codechip[data-country='HU']::before {
+  background: linear-gradient(#ce2939 0 33.3%, #fff 33.3% 66.6%, #477050 66.6%);
+}
+.codechip[data-country='BG']::before {
+  background: linear-gradient(#fff 0 33.3%, #00966e 33.3% 66.6%, #d62612 66.6%);
+}
+.codechip[data-country='LT']::before {
+  background: linear-gradient(#fdb913 0 33.3%, #006a44 33.3% 66.6%, #c1272d 66.6%);
+}
+.codechip[data-country='EE']::before {
+  background: linear-gradient(#0072ce 0 33.3%, #000 33.3% 66.6%, #fff 66.6%);
+}
+.codechip[data-country='AM']::before {
+  background: linear-gradient(#d90012 0 33.3%, #0033a0 33.3% 66.6%, #f2a800 66.6%);
+}
+.codechip[data-country='GA']::before {
+  background: linear-gradient(#009e60 0 33.3%, #fcd116 33.3% 66.6%, #3a75c4 66.6%);
+}
+.codechip[data-country='LU']::before {
+  background: linear-gradient(#ed2939 0 33.3%, #fff 33.3% 66.6%, #00a1de 66.6%);
+}
+.codechip[data-country='BO']::before {
+  background: linear-gradient(#d52b1e 0 33.3%, #f9e300 33.3% 66.6%, #007934 66.6%);
+}
+.codechip[data-country='VE']::before {
+  background: linear-gradient(#fc0 0 33.3%, #00247d 33.3% 66.6%, #cf142b 66.6%);
+}
+.codechip[data-country='PY']::before {
+  background: linear-gradient(#d52b1e 0 33.3%, #fff 33.3% 66.6%, #0038a8 66.6%);
+}
+
+/* Bands of unequal height. */
+.codechip[data-country='ES']::before {
+  background: linear-gradient(#aa151b 0 25%, #f1bf00 25% 75%, #aa151b 75%);
+}
+.codechip[data-country='AT']::before {
+  background: linear-gradient(#ed2939 0 33.3%, #fff 33.3% 66.6%, #ed2939 66.6%);
+}
+.codechip[data-country='LV']::before {
+  background: linear-gradient(#9e3039 0 40%, #fff 40% 60%, #9e3039 60%);
+}
+.codechip[data-country='AR']::before {
+  background: linear-gradient(#74acdf 0 33.3%, #fff 33.3% 66.6%, #74acdf 66.6%);
+}
+.codechip[data-country='CO']::before {
+  background: linear-gradient(#fcd116 0 50%, #003893 50% 75%, #ce1126 75%);
+}
+.codechip[data-country='EC']::before {
+  background: linear-gradient(#fcd116 0 50%, #0033a0 50% 75%, #ce1126 75%);
+}
+.codechip[data-country='CR']::before {
+  background: linear-gradient(
+    #002b7f 0 20%, #fff 20% 33%, #ce1126 33% 67%, #fff 67% 80%, #002b7f 80%
+  );
+}
+
+/* Two bands. */
+.codechip[data-country='PL']::before {
+  background: linear-gradient(#fff 0 50%, #dc143c 50%);
+}
+.codechip[data-country='ID']::before,
+.codechip[data-country='MC']::before {
+  background: linear-gradient(#ce1126 0 50%, #fff 50%);
+}
+.codechip[data-country='UA']::before {
+  background: linear-gradient(#0057b7 0 50%, #ffd700 50%);
+}
+
+/* --- Vertical bands ------------------------------------------------------ */
+
+.codechip[data-country='FR']::before {
+  background: linear-gradient(to right, #002395 0 33.3%, #fff 33.3% 66.6%, #ed2939 66.6%);
+}
+.codechip[data-country='IT']::before {
+  background: linear-gradient(to right, #009246 0 33.3%, #fff 33.3% 66.6%, #ce2b37 66.6%);
+}
+.codechip[data-country='IE']::before {
+  background: linear-gradient(to right, #169b62 0 33.3%, #fff 33.3% 66.6%, #ff883e 66.6%);
+}
+.codechip[data-country='BE']::before {
+  background: linear-gradient(to right, #000 0 33.3%, #fae042 33.3% 66.6%, #ed2939 66.6%);
+}
+.codechip[data-country='RO']::before {
+  background: linear-gradient(to right, #002b7f 0 33.3%, #fcd116 33.3% 66.6%, #ce1126 66.6%);
+}
+.codechip[data-country='ML']::before {
+  background: linear-gradient(to right, #14b53a 0 33.3%, #fcd116 33.3% 66.6%, #ce1126 66.6%);
+}
+.codechip[data-country='GN']::before {
+  background: linear-gradient(to right, #ce1126 0 33.3%, #fcd116 33.3% 66.6%, #009460 66.6%);
+}
+.codechip[data-country='CI']::before {
+  background: linear-gradient(to right, #f77f00 0 33.3%, #fff 33.3% 66.6%, #009e60 66.6%);
+}
+.codechip[data-country='NG']::before {
+  background: linear-gradient(to right, #008751 0 33.3%, #fff 33.3% 66.6%, #008751 66.6%);
+}
+.codechip[data-country='PE']::before,
+.codechip[data-country='CA']::before {
+  background: linear-gradient(to right, #d52b1e 0 25%, #fff 25% 75%, #d52b1e 75%);
+}
+.codechip[data-country='MX']::before {
+  background: linear-gradient(to right, #006847 0 33.3%, #fff 33.3% 66.6%, #ce1126 66.6%);
+}
+.codechip[data-country='PT']::before {
+  background: linear-gradient(to right, #006600 0 40%, #ff0000 40%);
+}
+
+/* --- Stripes with a canton or a wedge ------------------------------------ */
+
+/* The star inside the triangle is beyond a swatch this size; the five stripes
+   and the hoist wedge are what identify it anyway. */
+.codechip[data-country='CU']::before {
+  background:
+    conic-gradient(from 45deg at 0 50%, #cf142b 0 90deg, transparent 90deg),
+    repeating-linear-gradient(#002a8f 0 20%, #fff 20% 40%);
+}
+
+.codechip[data-country='US']::before {
+  background:
+    linear-gradient(#3c3b6e 0 0) no-repeat 0 0 / 42% 54%,
+    repeating-linear-gradient(#b22234 0 7.7%, #fff 7.7% 15.4%);
+}
+
+.codechip[data-country='CL']::before {
+  background:
+    linear-gradient(#0039a6 0 0) no-repeat 0 0 / 34% 50%,
+    linear-gradient(#fff 0 50%, #d52b1e 50%);
+}
+
+/* Three more blue-white-blue tricolours. They are alike in life too, which is
+   what the code beside the swatch is for. */
+.codechip[data-country='HN']::before,
+.codechip[data-country='SV']::before,
+.codechip[data-country='NI']::before {
+  background: linear-gradient(#0073cf 0 33.3%, #fff 33.3% 66.6%, #0073cf 66.6%);
+}
+
+.codechip[data-country='GT']::before {
+  background: linear-gradient(to right, #4997d0 0 33.3%, #fff 33.3% 66.6%, #4997d0 66.6%);
+}
+
+/* --- Built up in layers --------------------------------------------------- */
+
+/**
+ * Brazil: a yellow rhombus on green, with the blue globe in the middle.
+ *
+ * The rhombus is not drawn — the four green corners are, and what is left
+ * between them is the rhombus. A `to bottom right` gradient runs corner to
+ * corner, so its first stop cuts a triangle off the top-left corner; four of
+ * them, one per direction, leave a diamond standing in the middle.
+ */
+.codechip[data-country='BR']::before {
+  background:
+    radial-gradient(circle at 50% 50%, #002776 0 26%, transparent 26%),
+    linear-gradient(to bottom right, #009c3b 0 24%, transparent 24%),
+    linear-gradient(to bottom left, #009c3b 0 24%, transparent 24%),
+    linear-gradient(to top right, #009c3b 0 24%, transparent 24%),
+    linear-gradient(to top left, #009c3b 0 24%, transparent 24%),
+    #ffdf00;
+}
+
+/**
+ * The Union Jack: two saltires and two crosses over blue, in that order back
+ * to front. The real thing counterchanges its diagonals — the red offset to
+ * one side of the white — which is a nicety no swatch this size can carry.
+ */
+.codechip[data-country='GB']::before {
+  background:
+    linear-gradient(#c8102e 0 0) no-repeat 50% 50% / 100% 20%,
+    linear-gradient(#c8102e 0 0) no-repeat 50% 50% / 16% 100%,
+    linear-gradient(#fff 0 0) no-repeat 50% 50% / 100% 36%,
+    linear-gradient(#fff 0 0) no-repeat 50% 50% / 30% 100%,
+    linear-gradient(to bottom right, transparent 44%, #c8102e 44% 56%, transparent 56%),
+    linear-gradient(to bottom left, transparent 44%, #c8102e 44% 56%, transparent 56%),
+    linear-gradient(to bottom right, transparent 36%, #fff 36% 64%, transparent 64%),
+    linear-gradient(to bottom left, transparent 36%, #fff 36% 64%, transparent 64%),
+    #012169;
+}
+
+/* Nordic crosses with a second cross inside the first. */
+.codechip[data-country='NO']::before {
+  background:
+    linear-gradient(#00205b 0 0) no-repeat 0 50% / 100% 10%,
+    linear-gradient(#00205b 0 0) no-repeat 38% 0 / 9% 100%,
+    linear-gradient(#fff 0 0) no-repeat 0 50% / 100% 26%,
+    linear-gradient(#fff 0 0) no-repeat 38% 0 / 23% 100%,
+    #ba0c2f;
+}
+.codechip[data-country='IS']::before {
+  background:
+    linear-gradient(#dc1e35 0 0) no-repeat 0 50% / 100% 10%,
+    linear-gradient(#dc1e35 0 0) no-repeat 38% 0 / 9% 100%,
+    linear-gradient(#fff 0 0) no-repeat 0 50% / 100% 26%,
+    linear-gradient(#fff 0 0) no-repeat 38% 0 / 23% 100%,
+    #02529c;
+}
+
+/* Stripes with a canton. */
+.codechip[data-country='GR']::before {
+  background:
+    linear-gradient(#0d5eaf 0 0) no-repeat 0 0 / 44% 56%,
+    repeating-linear-gradient(#0d5eaf 0 11.1%, #fff 11.1% 22.2%);
+}
+.codechip[data-country='UY']::before {
+  background:
+    radial-gradient(circle at 22% 26%, #fcd116 0 11%, transparent 11%),
+    linear-gradient(#fff 0 0) no-repeat 0 0 / 44% 56%,
+    repeating-linear-gradient(#fff 0 11.1%, #0038a8 11.1% 22.2%);
+}
+
+/* Quartered by a cross. */
+.codechip[data-country='DO']::before {
+  background:
+    linear-gradient(#fff 0 0) no-repeat 0 50% / 100% 22%,
+    linear-gradient(#fff 0 0) no-repeat 50% 0 / 20% 100%,
+    conic-gradient(
+      from 0deg at 50% 50%,
+      #ce1126 0 90deg, #002d62 90deg 180deg, #ce1126 180deg 270deg, #002d62 270deg
+    );
+}
+.codechip[data-country='PA']::before {
+  background: conic-gradient(
+    from 0deg at 50% 50%,
+    #d21034 0 90deg, #fff 90deg 180deg, #005293 180deg 270deg, #fff 270deg
+  );
+}
+
+/* Crescents, drawn as one disc biting into another. */
+.codechip[data-country='TR']::before {
+  background:
+    radial-gradient(circle at 44% 50%, #e30a17 0 19%, transparent 19%),
+    radial-gradient(circle at 37% 50%, #fff 0 25%, transparent 25%),
+    #e30a17;
+}
+.codechip[data-country='DZ']::before {
+  background:
+    radial-gradient(circle at 55% 50%, #fff 0 19%, transparent 19%),
+    radial-gradient(circle at 48% 50%, #d21034 0 25%, transparent 25%),
+    linear-gradient(to right, #006233 0 50%, #fff 50%);
+}
+
+/* A single charge, reduced to its shape and its place. */
+.codechip[data-country='CN']::before {
+  background: radial-gradient(circle at 22% 30%, #ffde00 0 16%, transparent 16%), #de2910;
+}
+.codechip[data-country='VN']::before {
+  background: radial-gradient(circle at 50% 50%, #ffff00 0 20%, transparent 20%), #da251d;
+}
+.codechip[data-country='IN']::before {
+  background:
+    radial-gradient(circle at 50% 50%, #000080 0 9%, transparent 9%),
+    linear-gradient(#ff9933 0 33.3%, #fff 33.3% 66.6%, #138808 66.6%);
+}
+.codechip[data-country='IL']::before {
+  background: linear-gradient(
+    #fff 0 16%, #0038b8 16% 28%, #fff 28% 72%, #0038b8 72% 84%, #fff 84%
+  );
+}
+.codechip[data-country='EG']::before {
+  background: linear-gradient(#ce1126 0 33.3%, #fff 33.3% 66.6%, #000 66.6%);
+}
+.codechip[data-country='TH']::before {
+  background: linear-gradient(
+    #a51931 0 17%, #fff 17% 33%, #2d2a4a 33% 67%, #fff 67% 83%, #a51931 83%
+  );
+}
+
+/* --- Crosses and discs --------------------------------------------------- */
+
+.codechip[data-country='DK']::before {
+  background:
+    linear-gradient(#fff 0 0) no-repeat 0 50% / 100% 22%,
+    linear-gradient(#fff 0 0) no-repeat 38% 0 / 20% 100%,
+    #c8102e;
+}
+.codechip[data-country='SE']::before {
+  background:
+    linear-gradient(#fecc00 0 0) no-repeat 0 50% / 100% 22%,
+    linear-gradient(#fecc00 0 0) no-repeat 38% 0 / 20% 100%,
+    #005293;
+}
+.codechip[data-country='FI']::before {
+  background:
+    linear-gradient(#003580 0 0) no-repeat 0 50% / 100% 22%,
+    linear-gradient(#003580 0 0) no-repeat 38% 0 / 20% 100%,
+    #fff;
+}
+.codechip[data-country='CH']::before {
+  background:
+    linear-gradient(#fff 0 0) no-repeat 50% 50% / 60% 20%,
+    linear-gradient(#fff 0 0) no-repeat 50% 50% / 20% 60%,
+    #d52b1e;
+}
+.codechip[data-country='JP']::before {
+  background: radial-gradient(circle at 50% 50%, #bc002d 0 30%, #fff 30%);
+}

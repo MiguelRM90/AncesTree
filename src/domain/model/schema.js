@@ -11,28 +11,23 @@
 
 import { SCHEMA_VERSION, Sex, UnionType, ParentType, Certainty, MediaKind } from './factories.js';
 import { parseDate, unknownDate } from '../date/parse.js';
-import { v1ToV2 } from '../migrations/v1-to-v2.js';
+import { isCountryCode } from './countries.js';
 
 const COLLECTIONS = ['persons', 'unions', 'parentChildren', 'media'];
 
 /**
- * Applied in a chain, oldest first. Each is a pure `(data) => data`, so a file
- * three versions behind is brought forward one step at a time rather than by a
- * special case per starting point.
+ * No migrations yet, on purpose.
+ *
+ * The schema is still being designed, so it stays at version 1 and changes in
+ * place. Writing a migration per field while the shape is still moving is
+ * bookkeeping for versions nobody ever had.
+ *
+ * Every field so far is additive with a safe default and normalizeProject
+ * fills them in, so a file written by an older build still opens. The
+ * migration chain — and the refusal to open a file from a later version —
+ * arrive when v1 actually ships, which is the point at which a version number
+ * starts meaning anything.
  */
-const MIGRATIONS = { 1: v1ToV2 };
-
-function migrate(data) {
-  let current = data;
-
-  while (current.schemaVersion < SCHEMA_VERSION) {
-    const step = MIGRATIONS[current.schemaVersion];
-    if (!step) break;
-    current = step(current);
-  }
-
-  return current;
-}
 
 export class SchemaError extends Error {
   constructor(code, detail) {
@@ -62,17 +57,8 @@ export function validateProject(data) {
     return { ok: false, errors: [new SchemaError('NOT_AN_OBJECT', 'root is not an object')] };
   }
 
-  const version = data.schemaVersion;
-  if (!Number.isInteger(version)) {
+  if (!Number.isInteger(data.schemaVersion)) {
     errors.push(new SchemaError('MISSING_VERSION', 'schemaVersion is required'));
-  } else if (version > SCHEMA_VERSION) {
-    // Explicit refusal: a file from the future is not opened half-way.
-    errors.push(
-      new SchemaError(
-        'FUTURE_VERSION',
-        `file uses schema v${version}, this app supports v${SCHEMA_VERSION}`,
-      ),
-    );
   }
 
   for (const key of COLLECTIONS) {
@@ -83,7 +69,7 @@ export function validateProject(data) {
 
   if (errors.length > 0) return { ok: false, errors };
 
-  return { ok: true, data: normalizeProject(migrate(data)) };
+  return { ok: true, data: normalizeProject(data) };
 }
 
 /**
@@ -118,6 +104,9 @@ function normalizePerson(p) {
     secondLastName: stringOr(p.secondLastName),
     alsoKnownAs: Array.isArray(p.alsoKnownAs) ? p.alsoKnownAs.map((v) => stringOr(v)) : [],
     sex: enumOr(p.sex, Sex, Sex.UNKNOWN),
+    // An unrecognised code is dropped rather than kept: a flag for a country
+    // that does not exist is worse than no flag.
+    nationality: isCountryCode(p.nationality) ? p.nationality : '',
     birth: normalizeEvent(p.birth),
     death: normalizeEvent(p.death),
     isPlaceholder: p.isPlaceholder === true,

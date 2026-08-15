@@ -13,6 +13,8 @@ import { S } from '../../config/strings.js';
 import { describeIssue } from '../issue-text.js';
 import { parseDate } from '../../domain/date/parse.js';
 import { Sex, MediaRole } from '../../domain/model/factories.js';
+import { countriesByName, countryFlag } from '../../domain/model/countries.js';
+import { supportsFlagEmoji } from '../flag-support.js';
 import './date-field.js';
 import './person-photo.js';
 
@@ -57,6 +59,7 @@ export class PersonEditor extends HTMLElement {
     this.#fields.lastName.value = person.lastName;
     this.#fields.secondLastName.value = person.secondLastName ?? '';
     this.#fields.sex.value = person.sex;
+    this.#fields.nationality.value = person.nationality ?? '';
     this.#fields.notes.value = person.notes;
 
     // A missing event is a missing event: the controls show empty, never the
@@ -82,10 +85,16 @@ export class PersonEditor extends HTMLElement {
     // infer is its own name.
     dialog.setAttribute('aria-labelledby', 'editor-title');
 
+    dialog.addEventListener('click', (event) => {
+      if (event.target === dialog) this.close();
+    });
+
+
     this.#fields.firstName = input();
     this.#fields.lastName = input();
     this.#fields.secondLastName = input();
     this.#fields.sex = select();
+    this.#fields.nationality = countrySelect();
     this.#fields.birthDate = document.createElement('date-field');
     this.#fields.deathDate = document.createElement('date-field');
     this.#fields.birthPlace = input();
@@ -130,7 +139,13 @@ export class PersonEditor extends HTMLElement {
               labelled(S.editor.secondLastName, this.#fields.secondLastName),
             ],
           }),
-          labelled(S.editor.sex, this.#fields.sex),
+          el('div', {
+            class: 'pair',
+            children: [
+              labelled(S.editor.sex, this.#fields.sex),
+              labelled(S.editor.nationality, this.#fields.nationality),
+            ],
+          }),
           this.#eventFieldset(S.editor.birth, 'birth'),
           this.#eventFieldset(S.editor.death, 'death'),
           this.#photoFieldset(),
@@ -290,6 +305,7 @@ export class PersonEditor extends HTMLElement {
         lastName: this.#fields.lastName.value.trim(),
         secondLastName: this.#fields.secondLastName.value.trim(),
         sex: this.#fields.sex.value,
+        nationality: this.#fields.nationality.value,
         birth: eventFrom(this.#fields.birthDate.raw, this.#fields.birthPlace.value),
         death: eventFrom(this.#fields.deathDate.raw, this.#fields.deathPlace.value),
         notes: this.#fields.notes.value,
@@ -330,6 +346,27 @@ function select() {
   for (const value of Object.values(Sex)) {
     node.append(el('option', { text: S.sex[value], attrs: { value } }));
   }
+  return node;
+}
+
+/**
+ * Every country, named in the reader's own language and sorted by that name.
+ *
+ * The flag is only prefixed where the platform draws one. An option list of
+ * boxed letter pairs is noise, and a dropdown cannot be styled into badges the
+ * way a card can, so there the name carries it alone.
+ */
+function countrySelect() {
+  const node = document.createElement('select');
+  node.append(el('option', { text: S.editor.noNationality, attrs: { value: '' } }));
+
+  const flags = supportsFlagEmoji();
+
+  for (const { code, name } of countriesByName()) {
+    const label = flags ? `${countryFlag(code)}  ${name}` : `${name}  (${code})`;
+    node.append(el('option', { text: label, attrs: { value: code } }));
+  }
+
   return node;
 }
 

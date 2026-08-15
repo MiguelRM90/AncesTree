@@ -125,6 +125,19 @@ function buildFamilies(project) {
   return { all, childFamilies, spouseFamilies };
 }
 
+/** The parent links a child has, gathered per family. */
+function groupByFamily(entries = []) {
+  const byFamily = new Map();
+
+  for (const { family, link } of entries) {
+    const links = byFamily.get(family.xref);
+    if (links) links.push(link);
+    else byFamily.set(family.xref, [link]);
+  }
+
+  return byFamily;
+}
+
 /** personId -> the media attached to them, carrying the role of the link. */
 function buildMediaLinks(project) {
   const map = new Map();
@@ -179,16 +192,26 @@ function writeIndividual(out, person, { xref, families, media }) {
 
   out.line(1, 'SEX', person.sex);
 
+  // NATI is a standard 5.5.1 attribute, so other applications understand it.
+  if (person.nationality) out.line(1, 'NATI', person.nationality);
+
   writeEvent(out, 'BIRT', person.birth);
   writeEvent(out, 'DEAT', person.death);
 
   if (person.notes) out.text(1, 'NOTE', person.notes);
 
-  // FAMC: the families this person is a child in. PEDI belongs to the link, so
-  // it is written per family, not per parent — the one place where GEDCOM
-  // cannot express what the model holds.
-  for (const { family, link } of families.childFamilies.get(person.id) ?? []) {
-    out.line(1, 'FAMC', family.xref);
+  // FAMC: the families this person is a child in. ONE line per family, not per
+  // parent — the model holds an edge per parent, and writing one FAMC for each
+  // produced a duplicate pointer to the same family, which is invalid and came
+  // back on import as two sets of links.
+  //
+  // PEDI belongs to the family link, so both parents share it. That is the one
+  // place where GEDCOM cannot express what the model holds, and the biological
+  // link wins when they disagree.
+  for (const [xref, links] of groupByFamily(families.childFamilies.get(person.id))) {
+    const link = links.find((l) => l.type === ParentType.BIOLOGICAL) ?? links[0];
+
+    out.line(1, 'FAMC', xref);
     out.line(2, 'PEDI', PEDIGREE[link.type] ?? 'birth');
     if (link.certainty !== Certainty.CONFIRMED) out.line(2, '_CERT', link.certainty);
     if (link.type === ParentType.STEP || link.type === ParentType.GUARDIAN) {

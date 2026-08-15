@@ -16,11 +16,13 @@
  */
 
 import { el, svg, setChildren, emit } from '../dom.js';
-import { base, sheet } from '../styles/sheets.js';
+import { base, flags, sheet } from '../styles/sheets.js';
 import css from './person-card.css?inline';
 import { S } from '../../config/strings.js';
 import { issueLine } from '../issue-text.js';
 import { displayName } from '../../domain/graph/queries.js';
+import { countryFlag, countryName } from '../../domain/model/countries.js';
+import { supportsFlagEmoji } from '../flag-support.js';
 import { formatLifespan } from '../../domain/date/format.js';
 import { Severity } from '../../domain/validation/engine.js';
 import './person-photo.js';
@@ -39,7 +41,7 @@ export class PersonCard extends HTMLElement {
   constructor() {
     super();
     const root = this.attachShadow({ mode: 'open', delegatesFocus: true });
-    root.adoptedStyleSheets = [base, styles];
+    root.adoptedStyleSheets = [base, flags, styles];
     this.#button = el('button', { attrs: { type: 'button', role: 'treeitem' } });
     this.#photo = document.createElement('person-photo');
     root.append(this.#button);
@@ -121,7 +123,13 @@ export class PersonCard extends HTMLElement {
 
     setChildren(this.#button, [
       this.#photo,
-      el('span', { class: 'name', text: name, attrs: { title: name } }),
+      el('span', {
+        class: 'line',
+        children: [
+          el('span', { class: 'name', text: name, attrs: { title: name } }),
+          this.#nationality(person.nationality),
+        ],
+      }),
       el('span', { class: 'dates', text: lifespan }),
       this.#noteMark(person.notes),
       this.#flag(notes),
@@ -132,9 +140,33 @@ export class PersonCard extends HTMLElement {
     // which would otherwise be silently dropped.
     this.#button.setAttribute(
       'aria-label',
-      [name, lifespan, person.notes && S.card.hasNote, ...notes].filter(Boolean).join('. '),
+      [name, countryName(person.nationality), lifespan, person.notes && S.card.hasNote, ...notes]
+        .filter(Boolean)
+        .join('. '),
     );
     this.#button.setAttribute('aria-selected', String(this.hasAttribute('focal')));
+  }
+
+  /**
+   * The nationality: a flag where the platform draws one, and a deliberate
+   * badge where it does not.
+   *
+   * Windows has no flag glyphs, so `🇪🇸` there is two loose boxed letters that
+   * read as a rendering failure. The badge is the same information, framed so
+   * it looks meant — and the moment a flag-capable font is installed, the real
+   * flag appears instead.
+   */
+  #nationality(code) {
+    if (!code) return null;
+
+    const flag = supportsFlagEmoji() ? countryFlag(code) : '';
+
+    return el('span', {
+      class: flag ? 'flagchip' : 'codechip',
+      text: flag || code,
+      dataset: flag ? {} : { country: code },
+      attrs: { title: countryName(code), 'aria-hidden': 'true' },
+    });
   }
 
   /**
