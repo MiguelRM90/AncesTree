@@ -1,0 +1,21 @@
+node_modules/
+dist/
+.DS_Store
+*.local
+.vite/
+
+# Design docs are written in Spanish and stay local: they are the working
+# specification, not part of the published site.
+*.md
+vision.txt
+
+# Never, under any circumstance, real family data in the repository.
+# Test fixtures are anonymised and live in test/fixtures/.
+*.ged
+!test/fixtures/**/*.ged
+family.json
+manifest.json
+!public/manifest.webmanifest
+photos/
+documents/
+backups/

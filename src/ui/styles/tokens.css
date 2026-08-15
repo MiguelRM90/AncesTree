@@ -1,0 +1,162 @@
+/**
+ * Design tokens.
+ *
+ * Native CSS, no preprocessors (decisions.md, what stays out). Components read
+ * these tokens from inside their shadow DOM: custom properties cross the shadow
+ * boundary, which is exactly what we want.
+ *
+ * Every colour pair is verified against WCAG 2.1 by test/contrast.test.js,
+ * which reads this file. Changing a value without running the tests will fail
+ * the build, on purpose.
+ *
+ * Two border tokens, and the accessible one is the default: --c-border meets
+ * the 3:1 required for interactive boundaries, --c-border-subtle is only for
+ * decoration where nothing depends on seeing it. Forgetting which to use gives
+ * the safe one.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* Colour: paper and ink, with an archival green as the accent */
+  --c-bg: #faf8f5;
+  --c-surface: #ffffff;
+  --c-surface-sunken: #f1eee7;
+  --c-border: #8b8274;
+  --c-border-subtle: #ddd6ca;
+  --c-text: #1f1c18;
+  --c-text-muted: #5f584c;
+  --c-accent: #2f6b4f;
+  --c-accent-soft: #e0ece5;
+  --c-on-accent: #ffffff;
+  --c-warning: #7a4f0d;
+  --c-warning-soft: #fbf0da;
+  --c-error: #8f2323;
+  --c-error-soft: #fbe4e4;
+  --c-line: #6f6759;
+  --c-focus: #1f1c18;
+
+  /* Spacing: scale of 4 */
+  --s-1: 0.25rem;
+  --s-2: 0.5rem;
+  --s-3: 0.75rem;
+  --s-4: 1rem;
+  --s-6: 1.5rem;
+  --s-8: 2rem;
+  --s-12: 3rem;
+
+  /* Typography. Body text is a full 1rem: 15px body copy is one of the most
+     common accessibility complaints, and this app is read for long stretches. */
+  --font-body: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', 'Consolas', monospace;
+  --fs-sm: 0.875rem;
+  --fs-base: 1rem;
+  --fs-lg: 1.25rem;
+  --fs-xl: 1.75rem;
+
+  /* Shapes */
+  --radius: 8px;
+  --radius-sm: 4px;
+  --shadow: 0 1px 2px rgb(31 28 24 / 8%), 0 4px 12px rgb(31 28 24 / 6%);
+
+  /* Tree. Cards are a fixed size so a row never goes ragged and the SVG lines
+     are measured off predictable boxes. */
+  --card-width: 12rem;
+  --card-height: 4.75rem;
+  --line-width: 1.75px;
+  --row-gap: 4rem;
+  --node-gap: 1.5rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --c-bg: #16150f;
+    --c-surface: #201e18;
+    --c-surface-sunken: #1a1813;
+    --c-border: #78705f;
+    --c-border-subtle: #3a362c;
+    --c-text: #f0ece3;
+    --c-text-muted: #b0a795;
+    --c-accent: #7fc0a0;
+    --c-accent-soft: #22352b;
+    --c-on-accent: #0d1a13;
+    --c-warning: #e6b96f;
+    --c-warning-soft: #352913;
+    --c-error: #ef9a9a;
+    --c-error-soft: #3a1f1f;
+    --c-line: #8d8471;
+    --c-focus: #f0ece3;
+    --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 4px 12px rgb(0 0 0 / 30%);
+  }
+}
+
+/**
+ * Users who asked their system for more contrast get it: muted text collapses
+ * into full-strength text, and every boundary goes to maximum.
+ */
+@media (prefers-contrast: more) {
+  :root {
+    --c-text-muted: #33302a;
+    --c-border: #1f1c18;
+    --c-border-subtle: #6f6759;
+    --c-line: #1f1c18;
+    --c-accent: #1d5138;
+    --c-warning: #5d3c09;
+    --c-error: #7a1a1a;
+    --line-width: 2.25px;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --c-text-muted: #e4dfd4;
+      --c-border: #cfc7b4;
+      --c-border-subtle: #8d8471;
+      --c-line: #e4dfd4;
+      --c-accent: #a8dcc0;
+      --c-warning: #f4d59c;
+      --c-error: #ffc2c2;
+    }
+  }
+}
+
+/**
+ * Windows High Contrast and similar modes. The system replaces colours whether
+ * we cooperate or not, so the tokens are mapped onto system colours rather than
+ * fought. SVG strokes matter here: they are not reliably forced on their own,
+ * and in this app the strokes are the content.
+ */
+@media (forced-colors: active) {
+  :root {
+    --c-bg: Canvas;
+    --c-surface: Canvas;
+    --c-surface-sunken: Canvas;
+    --c-border: CanvasText;
+    --c-border-subtle: CanvasText;
+    --c-text: CanvasText;
+    --c-text-muted: CanvasText;
+    --c-accent: Highlight;
+    --c-accent-soft: Canvas;
+    --c-on-accent: HighlightText;
+    --c-warning: CanvasText;
+    --c-warning-soft: Canvas;
+    --c-error: CanvasText;
+    --c-error-soft: Canvas;
+    --c-line: CanvasText;
+    --c-focus: Highlight;
+    --shadow: none;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--c-bg);
+  color: var(--c-text);
+  font: var(--fs-base) / 1.5 var(--font-body);
+}
+
+/* The app is desktop-only: there is no responsive design for mobile, because
+   File System Access exists in no mobile browser (see storage.md). */
