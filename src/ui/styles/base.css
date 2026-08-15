@@ -1,0 +1,55 @@
+/**
+ * Shared by every component's shadow root: inherited typography and a focus
+ * ring that survives any background.
+ */
+
+:host {
+  font: inherit;
+  color: var(--c-text);
+}
+
+:host([hidden]) {
+  display: none;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--c-border);
+  background: var(--c-surface);
+  color: var(--c-text);
+  padding: var(--s-2) var(--s-3);
+}
+
+button:hover {
+  border-color: var(--c-accent);
+}
+
+button.primary {
+  background: var(--c-accent);
+  border-color: var(--c-accent);
+  color: var(--c-on-accent);
+}
+
+/**
+ * The ring sits OUTSIDE the control thanks to outline-offset, so it is drawn
+ * against the surrounding surface rather than against the button's own colour.
+ * That is what keeps it visible on the primary button too, where an
+ * accent-coloured ring on an accent-coloured background would vanish.
+ */
+:focus-visible {
+  outline: 3px solid var(--c-focus);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+@media (forced-colors: active) {
+  :focus-visible {
+    outline-color: Highlight;
+  }
+
+  button {
+    border-color: CanvasText;
+  }
+}

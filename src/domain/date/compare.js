@@ -6,6 +6,8 @@
  * `<` (data-model.md, date comparison section).
  */
 
+import { anchorOf } from './parse.js';
+
 export const Comparison = {
   CERTAIN: 'CERTAIN',
   POSSIBLE: 'POSSIBLE',
@@ -69,4 +71,22 @@ export function monthsBetween(fromIso, toIso) {
 /** true when the date provides no bound at all. */
 export function isOpen(date) {
   return !date || (date.earliest === null && date.latest === null);
+}
+
+/**
+ * Does the order the user actually wrote look wrong?
+ *
+ * Overlapping intervals mean "cannot be ruled out", which is not the same as
+ * "suspicious". Someone born AFT 1700 who died BEF 1755 has intervals that
+ * overlap — [1701, ∞) against (-∞, 1754] — yet nothing about those dates is
+ * odd, and warning about them buries the real problems in noise.
+ *
+ * Comparing the values as written keeps the signal: ABT 1900 followed by 1898
+ * still reads as inverted and still deserves a warning.
+ */
+export function looksInverted(a, b) {
+  const from = anchorOf(a);
+  const to = anchorOf(b);
+  if (from === null || to === null) return false;
+  return from > to;
 }

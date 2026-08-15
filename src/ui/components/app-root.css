@@ -1,0 +1,65 @@
+:host { display: grid; grid-template-rows: auto 1fr; height: 100vh; }
+
+header {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-3) var(--s-4);
+  border-bottom: 1px solid var(--c-border-subtle);
+  background: var(--c-surface);
+}
+h1 { font-size: var(--fs-base); margin: 0 var(--s-4) 0 0; font-weight: 600; }
+.spacer { flex: 1; }
+.status { font-size: var(--fs-sm); color: var(--c-text-muted); }
+.divider { width: 1px; height: 1.5rem; background: var(--c-border-subtle); margin: 0 var(--s-1); }
+
+.actions-inline { display: flex; gap: var(--s-2); align-items: center; }
+.actions-inline[hidden] { display: none; }
+
+.depth { display: flex; align-items: center; gap: var(--s-1); font-size: var(--fs-sm); }
+.depth select {
+  font: inherit;
+  color: var(--c-text);
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  padding: var(--s-1);
+}
+
+.focal {
+  font-size: var(--fs-sm);
+  color: var(--c-text-muted);
+  max-width: 22rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.focal b { color: var(--c-text); font-weight: 600; }
+
+/* A disabled control still has to be legible: 0.45 opacity pushed the label
+   under 3:1. Muted colours say "unavailable" without dissolving the text. */
+button[disabled] {
+  cursor: default;
+  color: var(--c-text-muted);
+  border-color: var(--c-border-subtle);
+  background: var(--c-surface-sunken);
+}
+button[disabled]:hover { border-color: var(--c-border-subtle); }
+
+main { overflow: auto; }
+
+.screen {
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--s-4);
+  padding: var(--s-12);
+  text-align: center;
+  max-width: 34rem;
+  margin: 0 auto;
+}
+.screen h2 { margin: 0; font-size: var(--fs-xl); }
+.screen p { margin: 0; color: var(--c-text-muted); }
+.actions { display: flex; gap: var(--s-3); margin-top: var(--s-4); }
+code { font-family: var(--font-mono); font-size: var(--fs-sm); }
+.error { color: var(--c-error); }

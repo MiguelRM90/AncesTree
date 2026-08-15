@@ -43,6 +43,30 @@ export function validateBlocking(g) {
   return issues;
 }
 
+/**
+ * Identifies an issue by rule and by who it is about, not by object identity,
+ * so the same problem is recognised across two runs of the validator.
+ */
+export const issueKey = (found) =>
+  `${found.ruleId}|${found.subjects.map((s) => s.id).sort().join(',')}`;
+
+/** The keys of every blocking error a graph already carries. */
+export const blockingKeys = (issues) =>
+  new Set(issues.filter((i) => i.severity === Severity.ERROR).map(issueKey));
+
+/**
+ * Which blocking errors a change would INTRODUCE, ignoring those already
+ * present.
+ *
+ * A project imported from another application routinely arrives with
+ * impossible data in it. Refusing every subsequent edit until all of it is
+ * fixed would make the archive read-only exactly when the user needs to repair
+ * it — so only new damage blocks a change.
+ */
+export function introducedBy(existingKeys, candidateIssues) {
+  return candidateIssues.filter((found) => !existingKeys.has(issueKey(found)));
+}
+
 const ORDER = { ERROR: 0, WARNING: 1, INFO: 2 };
 
 function sortBySeverity(issues) {

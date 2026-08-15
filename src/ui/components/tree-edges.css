@@ -1,0 +1,22 @@
+:host {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+svg { width: 100%; height: 100%; display: block; }
+
+/* These strokes are the content of a family tree, not decoration, so they
+   carry real contrast (WCAG 1.4.11) and enough weight to survive it. */
+path {
+  fill: none;
+  stroke: var(--c-line);
+  stroke-width: var(--line-width);
+  stroke-linejoin: round;
+}
+path.partner { stroke-width: calc(var(--line-width) + 0.5px); }
+
+/* SVG strokes are not reliably replaced in forced colours mode, so they are
+   mapped explicitly. */
+@media (forced-colors: active) {
+  path { stroke: CanvasText; }
+}

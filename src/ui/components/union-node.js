@@ -8,31 +8,9 @@
  */
 
 import { base, sheet } from '../styles/sheets.js';
+import css from './union-node.css?inline';
 
-const styles = sheet(`
-  :host {
-    display: grid;
-    place-items: center;
-    width: var(--s-6);
-    align-self: center;
-  }
-
-  /* Marriage versus an informal union is signalled by fill, not only by
-     colour: a filled dot for a marriage, a hollow ring otherwise. Hue alone
-     would be invisible to a colour-blind reader and in forced colours mode. */
-  .dot {
-    width: var(--s-3);
-    height: var(--s-3);
-    border-radius: 50%;
-    border: 2px solid var(--c-line);
-    background: var(--c-bg);
-  }
-
-  :host([type='MARRIED']) .dot {
-    background: var(--c-accent);
-    border-color: var(--c-accent);
-  }
-`);
+const styles = sheet(css);
 
 export class UnionNode extends HTMLElement {
   #dot;

@@ -14,43 +14,22 @@
 
 import { el, clear, debounce } from '../dom.js';
 import { base, sheet } from '../styles/sheets.js';
+import css from './tree-canvas.css?inline';
 import { S } from '../../config/strings.js';
 import { buildLayout, NodeType } from '../../domain/layout/engine.js';
+import { portraitOf } from '../../domain/graph/queries.js';
 import { RESIZE_DEBOUNCE_MS } from '../../config/limits.js';
 import './person-card.js';
 import './union-node.js';
 import './tree-edges.js';
 
-const styles = sheet(`
-  :host { display: block; position: relative; padding: var(--s-8); }
-
-  .rows { position: relative; display: grid; gap: var(--row-gap); justify-items: center; }
-
-  .row {
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    gap: var(--node-gap);
-  }
-
-  /* Layout spacers: empty, invisible elements that reserve room between
-     branches to avoid overlap and keep the layout symmetric. NOT to be confused
-     with the model's placeholder people. */
-  .spacer { width: var(--s-8); flex: 0 0 auto; }
-
-  .hint {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-  }
-`);
+const styles = sheet(css);
 
 export class TreeCanvas extends HTMLElement {
   #graph = null;
   #focalId = null;
   #issuesFor = () => [];
+  #resolvePhoto = null;
   #rows;
   #edgesLayer;
   #onResize;
@@ -87,11 +66,15 @@ export class TreeCanvas extends HTMLElement {
     this.#rows.removeEventListener('keydown', this.#onKeyDown);
   }
 
-  /** @param {{graph: object, focalId: string|null, issuesFor: Function}} view */
+  /**
+   * @param {{graph: object, focalId: string|null, issuesFor: Function,
+   *          resolvePhoto: Function}} view
+   */
   render(view) {
     this.#graph = view.graph;
     this.#focalId = view.focalId;
     this.#issuesFor = view.issuesFor ?? (() => []);
+    this.#resolvePhoto = view.resolvePhoto ?? null;
     this.#paint();
   }
 
@@ -127,7 +110,24 @@ export class TreeCanvas extends HTMLElement {
 
     // Drawing happens strictly inside a rAF after insertion: measuring earlier
     // returns zeros.
-    requestAnimationFrame(() => this.#paintEdges(edges));
+    requestAnimationFrame(() => {
+      this.#paintEdges(edges);
+      this.#revealFocal();
+    });
+  }
+
+  /**
+   * Brings the centred person into view.
+   *
+   * Re-rooting the tree rebuilds the entire layout, so without this the person
+   * just clicked can land anywhere — often off-screen. The view then looks like
+   * it changed at random, which is precisely how it felt.
+   */
+  #revealFocal() {
+    const card = this.#grid[this.#cursor.row]?.[this.#cursor.column];
+    // Instant, not smooth: animating a scroll across a tree this wide is both
+    // slow and disorienting.
+    card?.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
   }
 
   #paintEdges(edges) {
@@ -154,6 +154,8 @@ export class TreeCanvas extends HTMLElement {
     card.graph = this.#graph;
     card.level = level;
     card.focusable = false;
+    card.resolvePhoto = this.#resolvePhoto;
+    card.portrait = portraitOf(this.#graph, person.id)?.path ?? null;
     card.person = person;
     card.issues = this.#issuesFor(person.id);
     return card;

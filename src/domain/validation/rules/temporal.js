@@ -7,7 +7,14 @@
  */
 
 import { Severity, issue, subject } from '../issue.js';
-import { isBefore, yearsBetween, monthsBetween, Comparison, isOpen } from '../../date/compare.js';
+import {
+  isBefore,
+  yearsBetween,
+  monthsBetween,
+  looksInverted,
+  Comparison,
+  isOpen,
+} from '../../date/compare.js';
 import { isBiological } from '../../graph/queries.js';
 import { Sex } from '../../model/factories.js';
 import {
@@ -20,9 +27,20 @@ import {
 
 const { ERROR, WARNING } = Severity;
 
-/** ERROR when impossible, WARNING when merely doubtful, nothing when fine. */
-const gradeFrom = (comparison) =>
-  comparison === Comparison.IMPOSSIBLE ? ERROR : comparison === Comparison.CERTAIN ? null : WARNING;
+/**
+ * ERROR when impossible, WARNING when the written order looks wrong, nothing
+ * otherwise.
+ *
+ * Overlapping intervals alone are not a warning. "Cannot be ruled out" is the
+ * normal state of genealogical dates, and treating it as suspicious buried the
+ * real problems under thousands of notes about perfectly sensible records.
+ */
+function gradeOrder(earlier, later) {
+  const comparison = isBefore(earlier, later);
+  if (comparison === Comparison.IMPOSSIBLE) return ERROR;
+  if (comparison === Comparison.CERTAIN) return null;
+  return looksInverted(earlier, later) ? WARNING : null;
+}
 
 const birthDate = (person) => person?.birth?.date ?? null;
 const deathDate = (person) => person?.death?.date ?? null;
@@ -35,7 +53,7 @@ function deathBeforeBirth(g) {
     const death = deathDate(person);
     if (isOpen(birth) || isOpen(death)) continue;
 
-    const severity = gradeFrom(isBefore(birth, death));
+    const severity = gradeOrder(birth, death);
     if (severity) {
       found.push(
         issue('DEATH_BEFORE_BIRTH', severity, [subject('person', person.id)],
@@ -160,7 +178,7 @@ function unionDates(g) {
     const end = union.endDate;
 
     if (!isOpen(start) && !isOpen(end)) {
-      const severity = gradeFrom(isBefore(start, end));
+      const severity = gradeOrder(start, end);
       if (severity) {
         found.push(
           issue('UNION_END_BEFORE_START', severity, [subject('union', union.id)],
@@ -177,7 +195,7 @@ function unionDates(g) {
 
       const death = deathDate(person);
       if (!isOpen(death)) {
-        const severity = gradeFrom(isBefore(start, death));
+        const severity = gradeOrder(start, death);
         if (severity) {
           found.push(
             issue('UNION_AFTER_DEATH', severity,

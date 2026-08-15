@@ -1,8 +1,13 @@
 /**
- * Shared constructable stylesheets.
+ * Constructable stylesheets, built from real CSS files.
  *
- * Styles are defined ONCE at module level and adopted by every instance
- * (decisions.md, styles section):
+ * Each component keeps its styles in a sibling `.css` file and imports it with
+ * Vite's `?inline`, which hands back the file's text at build time. That keeps
+ * editor tooling, syntax highlighting and formatting working on actual CSS
+ * instead of on a template literal, and adds nothing to the runtime.
+ *
+ * The stylesheet itself is then built ONCE at module level and adopted by every
+ * instance (decisions.md, styles section):
  *
  *  1. CSP: a <style> inside a shadow root DOES count as an inline style for
  *     style-src; the shadow root does not exempt it. Constructable stylesheets
@@ -11,48 +16,13 @@
  *     With hundreds of cards on screen the difference is measurable.
  */
 
+import baseCss from './base.css?inline';
+
+/** @param {string} css  the text of a stylesheet */
 export function sheet(css) {
   const styles = new CSSStyleSheet();
   styles.replaceSync(css);
   return styles;
 }
 
-/** Shared base: inherited typography and a visible focus ring everywhere. */
-export const base = sheet(`
-  :host { font: inherit; color: var(--c-text); }
-  :host([hidden]) { display: none; }
-
-  button {
-    font: inherit;
-    cursor: pointer;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--c-border);
-    background: var(--c-surface);
-    color: var(--c-text);
-    padding: var(--s-2) var(--s-3);
-  }
-  button:hover { border-color: var(--c-accent); }
-
-  button.primary {
-    background: var(--c-accent);
-    border-color: var(--c-accent);
-    color: var(--c-on-accent);
-  }
-
-  /**
-   * The ring sits OUTSIDE the control thanks to outline-offset, so it is drawn
-   * against the surrounding surface rather than against the button's own
-   * colour. That is what keeps it visible on the primary button too, where an
-   * accent-coloured ring on an accent-coloured background would vanish.
-   */
-  :focus-visible {
-    outline: 3px solid var(--c-focus);
-    outline-offset: 2px;
-    border-radius: var(--radius-sm);
-  }
-
-  @media (forced-colors: active) {
-    :focus-visible { outline-color: Highlight; }
-    button { border-color: CanvasText; }
-  }
-`);
+export const base = sheet(baseCss);

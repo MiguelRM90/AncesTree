@@ -4,12 +4,14 @@ import { parentsOf, childrenOf, siblingsOf, childrenOfUnion } from '../src/domai
 import { ancestorsOf, wouldCreateCycle, closestCommonAncestor } from '../src/domain/graph/traversal.js';
 import { assignGenerations } from '../src/domain/graph/generations.js';
 import { buildLayout, NodeType } from '../src/domain/layout/engine.js';
-import { ParentType } from '../src/domain/model/factories.js';
+import { ParentType, Sex, createUnion, createParentChild } from '../src/domain/model/factories.js';
 import {
   minimalFamily,
   mixedAdoptionFamily,
   halfSiblingsFamily,
   familyWithPlaceholder,
+  person,
+  project,
 } from './fixtures/families.js';
 
 describe('queries', () => {
@@ -111,6 +113,42 @@ describe('generations', () => {
     const levels = assignGenerations(g, child.id, { up: 0, down: 0 });
     expect(levels.has(father.id)).to.equal(false);
   });
+
+  it('shows the focal person their own siblings', () => {
+    const { childA, childB, data } = halfSiblingsFamily();
+    const g = buildIndexes(data);
+    const levels = assignGenerations(g, childA.id, { up: 1, down: 1 });
+    expect(levels.get(childB.id)).to.equal(0);
+  });
+
+  /**
+   * The view is a pedigree, not a sweep of the whole generational band. A walk
+   * bounded only by depth reaches an ancestor, then all of their children, then
+   * those children's partners, then their children — and so on until it has the
+   * entire archive. On 10,000 people that was 2,439 at one generation.
+   */
+  it('does not spread sideways into cousins', () => {
+    const { father, motherA, motherB, childA, childB, data } = halfSiblingsFamily();
+
+    // childB's mother is a different woman: reachable only by going up to the
+    // shared father and back down. A pedigree view must not do that.
+    const g = buildIndexes(data);
+    const levels = assignGenerations(g, childA.id, { up: 4, down: 4 });
+
+    expect(levels.get(father.id)).to.equal(-1);
+    expect(levels.get(motherA.id)).to.equal(-1);
+    expect(levels.get(childB.id)).to.equal(0, 'half sibling is still shown');
+    expect(levels.has(motherB.id)).to.equal(false, "the half sibling's other parent is not");
+  });
+
+  it('brings each descendant their partner, so unions still render', () => {
+    const { father, mother, child, data } = minimalFamily();
+    const g = buildIndexes(data);
+    const levels = assignGenerations(g, father.id, { up: 0, down: 1 });
+
+    expect(levels.get(mother.id)).to.equal(0);
+    expect(levels.get(child.id)).to.equal(1);
+  });
 });
 
 describe('layout', () => {
@@ -135,5 +173,73 @@ describe('layout', () => {
     const { data } = minimalFamily();
     const g = buildIndexes(data);
     expect(buildLayout(g, null).rows).to.eql([]);
+  });
+
+  /**
+   * Ordering a row by birth date alone scattered siblings among other people's
+   * spouses, so the bar joining them ran over three strangers and read as
+   * though they were all siblings. Families have to stay contiguous.
+   */
+  describe('row ordering', () => {
+    /** One couple, three married children, each with their own spouse. */
+    const threeMarriedChildren = () => {
+      const father = person('Father', { sex: Sex.MALE, born: '1900' });
+      const mother = person('Mother', { sex: Sex.FEMALE, born: '1902' });
+      const union = createUnion({ partner1Id: father.id, partner2Id: mother.id });
+
+      const children = ['1925', '1928', '1931'].map((year, index) =>
+        person(`Child${index}`, { born: year }),
+      );
+      const spouses = children.map((_, index) => person(`Spouse${index}`, { born: '1930' }));
+
+      return {
+        father,
+        children,
+        spouses,
+        data: project({
+          persons: [father, mother, ...children, ...spouses],
+          unions: [
+            union,
+            ...children.map((child, index) =>
+              createUnion({ partner1Id: child.id, partner2Id: spouses[index].id }),
+            ),
+          ],
+          parentChildren: children.flatMap((child) => [
+            createParentChild({ parentId: father.id, childId: child.id, unionId: union.id }),
+            createParentChild({ parentId: mother.id, childId: child.id, unionId: union.id }),
+          ]),
+        }),
+      };
+    };
+
+    const rowOf = (layout, level) =>
+      layout.rows
+        .find((row) => row.level === level)
+        .nodes.filter((node) => node.type === NodeType.PERSON)
+        .map((node) => node.entityId);
+
+    it('keeps each couple together and in birth order', () => {
+      const { father, children, spouses, data } = threeMarriedChildren();
+      const g = buildIndexes(data);
+      const order = rowOf(buildLayout(g, father.id, { up: 0, down: 1 }), 1);
+
+      // Each child immediately followed by their own spouse, oldest first.
+      expect(order).to.eql([
+        children[0].id, spouses[0].id,
+        children[1].id, spouses[1].id,
+        children[2].id, spouses[2].id,
+      ]);
+    });
+
+    // The sibling comes first in the pair, not the person who married in.
+    it('puts the blood relative on the side facing their siblings', () => {
+      const { father, children, data } = threeMarriedChildren();
+      const g = buildIndexes(data);
+      const order = rowOf(buildLayout(g, father.id, { up: 0, down: 1 }), 1);
+
+      for (const child of children) {
+        expect(order.indexOf(child.id) % 2).to.equal(0, `${child.firstName} leads its pair`);
+      }
+    });
   });
 });

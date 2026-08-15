@@ -15,31 +15,13 @@
 
 import { el, setChildren, emit } from '../dom.js';
 import { base, sheet } from '../styles/sheets.js';
+import css from './date-field.css?inline';
 import { S } from '../../config/strings.js';
 import { DateMode, MODE_INPUT, buildRaw, describeDate } from '../../domain/date/build.js';
 import { parseDate, DateKind } from '../../domain/date/parse.js';
 import { formatDate } from '../../domain/date/format.js';
 
-const styles = sheet(`
-  :host { display: grid; gap: var(--s-2); }
-
-  .controls { display: flex; gap: var(--s-2); flex-wrap: wrap; align-items: center; }
-
-  select, input {
-    font: inherit;
-    color: var(--c-text);
-    background: var(--c-bg);
-    border: 1px solid var(--c-border);
-    border-radius: var(--radius-sm);
-    padding: var(--s-2);
-  }
-  select { flex: 0 0 auto; }
-  input { flex: 1 1 8rem; min-width: 6rem; }
-  input.year { flex: 0 0 6rem; }
-
-  .preview { font-size: var(--fs-sm); color: var(--c-text-muted); min-height: 1.2em; }
-  .preview.unknown { color: var(--c-warning); }
-`);
+const styles = sheet(css);
 
 const MODE_ORDER = [
   DateMode.UNKNOWN,

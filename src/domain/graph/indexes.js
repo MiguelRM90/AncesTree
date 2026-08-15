@@ -13,6 +13,7 @@
  * @property {Map<string, object>} media
  * @property {Map<string, object[]>} childrenByParent   parentId -> ParentChild[]
  * @property {Map<string, object[]>} parentsByChild     childId  -> ParentChild[]
+ * @property {Map<string, object[]>} childrenByUnion    unionId  -> ParentChild[]
  * @property {Map<string, object[]>} unionsByPerson     personId -> Union[]
  * @property {Map<string, object[]>} mediaByTarget      targetId -> MediaObject[]
  * @property {object} settings
@@ -27,9 +28,16 @@ export function buildIndexes(project) {
 
   const childrenByParent = new Map();
   const parentsByChild = new Map();
+  // Without this index, "the children of this union" means scanning every
+  // parent-child link once per union. That is the layout engine's inner loop,
+  // and on a 10,000-person tree it cost more than the rest of the layout put
+  // together.
+  const childrenByUnion = new Map();
+
   for (const link of project.parentChildren) {
     push(childrenByParent, link.parentId, link);
     push(parentsByChild, link.childId, link);
+    if (link.unionId) push(childrenByUnion, link.unionId, link);
   }
 
   const unionsByPerson = new Map();
@@ -50,6 +58,7 @@ export function buildIndexes(project) {
     media,
     childrenByParent,
     parentsByChild,
+    childrenByUnion,
     unionsByPerson,
     mediaByTarget,
     settings: project.settings,

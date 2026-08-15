@@ -4,6 +4,9 @@ dist/
 *.local
 .vite/
 
+# Generated stress-test projects. The generator is committed, its output is not.
+stress-*/
+
 # Design docs are written in Spanish and stay local: they are the working
 # specification, not part of the published site.
 *.md

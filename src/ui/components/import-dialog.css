@@ -1,0 +1,42 @@
+dialog {
+  border: 1px solid var(--c-border-subtle);
+  border-radius: var(--radius);
+  background: var(--c-surface);
+  color: var(--c-text);
+  padding: 0;
+  width: min(28rem, 90vw);
+  box-shadow: var(--shadow);
+}
+dialog::backdrop { background: rgb(0 0 0 / 35%); }
+
+.body { display: grid; gap: var(--s-4); padding: var(--s-6); }
+h2 { margin: 0; font-size: var(--fs-lg); }
+
+.card {
+  border: 1px solid var(--c-border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--c-surface-sunken);
+  padding: var(--s-3);
+  display: grid;
+  gap: var(--s-1);
+}
+.title { font-weight: 600; }
+.summary { font-size: var(--fs-sm); color: var(--c-text-muted); }
+
+.choices { display: grid; gap: var(--s-2); }
+.choice {
+  display: grid;
+  gap: var(--s-1);
+  text-align: left;
+  padding: var(--s-3);
+}
+.choice .hint { font-size: var(--fs-sm); color: var(--c-text-muted); font-weight: 400; }
+.choice .label { font-weight: 600; }
+
+footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--s-3) var(--s-6);
+  border-top: 1px solid var(--c-border);
+  background: var(--c-surface-sunken);
+}

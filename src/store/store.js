@@ -10,16 +10,24 @@
  */
 
 import { buildIndexes } from '../domain/graph/indexes.js';
-import { validateAll, validateBlocking, Severity } from '../domain/validation/engine.js';
+import {
+  validateAll,
+  validateBlocking,
+  blockingKeys,
+  introducedBy,
+  Severity,
+} from '../domain/validation/engine.js';
 import { mergeProjects } from '../domain/model/merge.js';
 import { loadProject, writeProject } from '../storage/project-store.js';
 import { rememberProject } from '../storage/handles.js';
+import { photoUrl, releaseAll } from '../storage/media-cache.js';
 import { AUTOSAVE_DEBOUNCE_MS, UNDO_STACK_SIZE } from '../config/limits.js';
 
 class Store extends EventTarget {
   #project = null;
   #indexes = null;
   #issues = [];
+  #blocking = new Set();
   #dirHandle = null;
   #saveTimer = null;
   #saving = false;
@@ -53,8 +61,17 @@ class Store extends EventTarget {
     await rememberProject(project.project.id, project.project.title, dirHandle);
   }
 
+  /**
+   * Resolves a photo path to something an <img> can show. Components ask for
+   * this through the store rather than reaching into storage/ themselves.
+   */
+  photoUrl(path) {
+    return photoUrl(this.#dirHandle, path);
+  }
+
   close() {
     this.#flushPendingSave();
+    releaseAll();
     this.#project = null;
     this.#indexes = null;
     this.#issues = [];
@@ -87,9 +104,10 @@ class Store extends EventTarget {
     const next = mutate(structuredClone(before));
 
     // ERROR rules only before writing. Warnings are computed afterwards so
-    // interaction is never held up.
-    const blocking = validateBlocking(buildIndexes(next));
-    if (blocking.length > 0) return { ok: false, errors: blocking };
+    // interaction is never held up. And only errors this change INTRODUCES can
+    // block it — see introducedBy().
+    const introduced = introducedBy(this.#blocking, validateBlocking(buildIndexes(next)));
+    if (introduced.length > 0) return { ok: false, errors: introduced };
 
     if (record) {
       this.#undo.push({ label, before });
@@ -147,6 +165,10 @@ class Store extends EventTarget {
   #reindex() {
     this.#indexes = buildIndexes(this.#project);
     this.#issues = validateAll(this.#indexes);
+
+    // The blocking errors the project already carries. Anything in here is
+    // pre-existing damage, not something the next edit did.
+    this.#blocking = blockingKeys(this.#issues);
   }
 
   issuesFor(entityId) {

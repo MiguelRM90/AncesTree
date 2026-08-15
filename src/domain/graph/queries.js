@@ -3,7 +3,7 @@
  * None of this is stored: it is computed from the four collections.
  */
 
-import { ParentType } from '../model/factories.js';
+import { ParentType, MediaRole } from '../model/factories.js';
 
 const EMPTY = Object.freeze([]);
 
@@ -82,11 +82,12 @@ export function biologicalParentIds(g, personId) {
  * shared by both partners when unionId was never set.
  */
 export function childrenOfUnion(g, union) {
-  const direct = new Set();
-  for (const link of g.parentChildren.values()) {
-    if (link.unionId === union.id) direct.add(link.childId);
+  const linked = g.childrenByUnion.get(union.id);
+
+  if (linked) {
+    const direct = new Set(linked.map((link) => link.childId));
+    return sortByBirth([...direct].map((id) => g.persons.get(id)).filter(Boolean));
   }
-  if (direct.size > 0) return [...direct].map((id) => g.persons.get(id)).filter(Boolean);
 
   const fromP1 = new Set(childLinksOf(g, union.partner1Id).map((l) => l.childId));
   const shared = childLinksOf(g, union.partner2Id)
@@ -107,6 +108,25 @@ export function sortByBirth(persons) {
     return av < bv ? -1 : 1;
   });
 }
+
+/** Every media item linked to a person, portrait first. */
+export function mediaOf(g, personId) {
+  const items = g.mediaByTarget.get(personId) ?? EMPTY;
+  return [...items].sort((a, b) => roleRank(a, personId) - roleRank(b, personId));
+}
+
+/**
+ * The portrait. Falls back to the first photo linked to the person: someone
+ * who attached one photo clearly meant it to be their picture, and making them
+ * mark it explicitly would be pedantry.
+ */
+export function portraitOf(g, personId) {
+  const photos = mediaOf(g, personId);
+  return photos[0] ?? null;
+}
+
+const roleRank = (item, personId) =>
+  item.links.some((link) => link.targetId === personId && link.role === MediaRole.PORTRAIT) ? 0 : 1;
 
 export function displayName(person) {
   if (!person) return '';

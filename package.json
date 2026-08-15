@@ -12,7 +12,9 @@
     "test": "web-test-runner \"test/**/*.test.js\" --node-resolve",
     "test:watch": "web-test-runner \"test/**/*.test.js\" --node-resolve --watch",
     "lint": "eslint src test",
-    "format": "prettier --write \"**/*.{js,css,html,json,md}\""
+    "format": "prettier --write \"**/*.{js,css,html,json,md}\"",
+    "stress:generate": "node scripts/generate-family.mjs --people 10000 --out ./stress-10k",
+    "stress:bench": "node scripts/benchmark.mjs ./stress-10k"
   },
   "devDependencies": {
     "@open-wc/testing": "4.0.0",

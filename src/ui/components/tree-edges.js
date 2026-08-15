@@ -16,31 +16,9 @@
 
 import { svg, clear } from '../dom.js';
 import { base, sheet } from '../styles/sheets.js';
+import css from './tree-edges.css?inline';
 
-const styles = sheet(`
-  :host {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-  }
-  svg { width: 100%; height: 100%; display: block; }
-
-  /* These strokes are the content of a family tree, not decoration, so they
-     carry real contrast (WCAG 1.4.11) and enough weight to survive it. */
-  path {
-    fill: none;
-    stroke: var(--c-line);
-    stroke-width: var(--line-width);
-    stroke-linejoin: round;
-  }
-  path.partner { stroke-width: calc(var(--line-width) + 0.5px); }
-
-  /* SVG strokes are not reliably replaced in forced colours mode, so they are
-     mapped explicitly. */
-  @media (forced-colors: active) {
-    path { stroke: CanvasText; }
-  }
-`);
+const styles = sheet(css);
 
 export class TreeEdges extends HTMLElement {
   #svg;
@@ -65,7 +43,11 @@ export class TreeEdges extends HTMLElement {
    * @param {HTMLElement} container  element holding the nodes
    */
   paint(edges, container) {
-    const bounds = container.getBoundingClientRect();
+    // Measured against this layer's own box, not the container's. The two can
+    // differ by the canvas padding, and a systematic offset in every line is
+    // exactly the kind of bug that looks like "the lines are slightly wrong"
+    // without ever pointing at its cause.
+    const bounds = this.getBoundingClientRect();
 
     // --- Read phase: the whole measurement batch together ------------------
     const centres = new Map();

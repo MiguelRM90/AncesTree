@@ -17,101 +17,31 @@
 
 import { el, setChildren, emit } from '../dom.js';
 import { base, sheet } from '../styles/sheets.js';
+import css from './person-card.css?inline';
 import { S } from '../../config/strings.js';
 import { issueLine } from '../issue-text.js';
 import { displayName } from '../../domain/graph/queries.js';
 import { formatLifespan } from '../../domain/date/format.js';
 import { Severity } from '../../domain/validation/engine.js';
+import './person-photo.js';
 
-const styles = sheet(`
-  :host { display: block; }
-
-  button {
-    position: relative;
-    width: var(--card-width);
-    min-height: var(--card-height);
-    padding: var(--s-3);
-    text-align: left;
-    background: var(--c-surface);
-    border: 1px solid var(--c-border);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    display: grid;
-    grid-template-rows: auto auto;
-    align-content: center;
-    gap: var(--s-1);
-  }
-
-  :host([focal]) button {
-    border-color: var(--c-accent);
-    box-shadow: 0 0 0 2px var(--c-accent-soft), var(--shadow);
-  }
-
-  /* Placeholder people are drawn differently and can be materialised */
-  :host([placeholder]) button {
-    border-style: dashed;
-    background: var(--c-surface-sunken);
-    color: var(--c-text-muted);
-  }
-
-  /* A long name is truncated rather than wrapped: wrapping would make this
-     card taller than its neighbours. The full name stays in the tooltip and
-     in the accessible name. */
-  .name {
-    font-weight: 600;
-    line-height: 1.25;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  /* Always rendered, even when empty, so the second row always occupies the
-     same space. */
-  .dates {
-    font-size: var(--fs-sm);
-    color: var(--c-text-muted);
-    font-variant-numeric: tabular-nums;
-    min-height: 1.2em;
-  }
-
-  /* Out of the flow: the badge must not change the height of the card. */
-  .flag {
-    position: absolute;
-    top: var(--s-1);
-    right: var(--s-1);
-    font-size: var(--fs-sm);
-    font-weight: 600;
-    line-height: 1.4;
-    padding: 0 var(--s-1);
-    border-radius: var(--radius-sm);
-    border: 1px solid currentColor;
-  }
-
-  /* Severity is not signalled by hue alone: an error badge is filled, a
-     warning badge is outlined. Colour-blind users and anyone in a forced
-     colours mode still get the distinction. */
-  .flag.error {
-    background: var(--c-error);
-    color: var(--c-surface);
-    border-color: var(--c-error);
-  }
-  .flag.warning {
-    background: var(--c-warning-soft);
-    color: var(--c-warning);
-  }
-`);
+const styles = sheet(css);
 
 export class PersonCard extends HTMLElement {
   #person = null;
   #issues = [];
   #graph = null;
+  #portraitPath = null;
+  #resolvePhoto = null;
   #button;
+  #photo;
 
   constructor() {
     super();
     const root = this.attachShadow({ mode: 'open', delegatesFocus: true });
     root.adoptedStyleSheets = [base, styles];
     this.#button = el('button', { attrs: { type: 'button', role: 'treeitem' } });
+    this.#photo = document.createElement('person-photo');
     root.append(this.#button);
   }
 
@@ -140,6 +70,18 @@ export class PersonCard extends HTMLElement {
   /** Indexed graph, used to name the people an issue is about. */
   set graph(value) {
     this.#graph = value;
+  }
+
+  /** Project-relative path of the portrait, or null for the silhouette. */
+  set portrait(value) {
+    this.#portraitPath = value;
+    this.#photo.path = value;
+  }
+
+  /** @param {(path: string) => Promise<string|null>} fn */
+  set resolvePhoto(fn) {
+    this.#resolvePhoto = fn;
+    this.#photo.resolve = fn;
   }
 
   /** Depth in the tree, 1-based, as ARIA requires. */
@@ -173,7 +115,12 @@ export class PersonCard extends HTMLElement {
     const lifespan = formatLifespan(person.birth, person.death);
     const notes = this.#issues.map((issue) => issueLine(issue, this.#graph));
 
+    this.#photo.person = person;
+    this.#photo.path = this.#portraitPath;
+    if (this.#resolvePhoto) this.#photo.resolve = this.#resolvePhoto;
+
     setChildren(this.#button, [
+      this.#photo,
       el('span', { class: 'name', text: name, attrs: { title: name } }),
       el('span', { class: 'dates', text: lifespan }),
       this.#flag(notes),

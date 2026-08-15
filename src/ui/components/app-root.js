@@ -6,10 +6,12 @@
  * comes down as properties (architecture.md, store section).
  */
 
-import { el, clear } from '../dom.js';
+import { el, clear, setChildren } from '../dom.js';
 import { base, sheet } from '../styles/sheets.js';
+import css from './app-root.css?inline';
 import { S } from '../../config/strings.js';
 import { describeIssue } from '../issue-text.js';
+import { mediaOf, displayName } from '../../domain/graph/queries.js';
 import { store } from '../../store/store.js';
 import * as actions from '../../store/actions.js';
 import './tree-canvas.js';
@@ -17,53 +19,7 @@ import './person-editor.js';
 import './import-dialog.js';
 import './app-notice.js';
 
-const styles = sheet(`
-  :host { display: grid; grid-template-rows: auto 1fr; height: 100vh; }
-
-  header {
-    display: flex;
-    align-items: center;
-    gap: var(--s-2);
-    padding: var(--s-3) var(--s-4);
-    border-bottom: 1px solid var(--c-border-subtle);
-    background: var(--c-surface);
-  }
-  h1 { font-size: var(--fs-base); margin: 0 var(--s-4) 0 0; font-weight: 600; }
-  .spacer { flex: 1; }
-  .status { font-size: var(--fs-sm); color: var(--c-text-muted); }
-  .divider { width: 1px; height: 1.5rem; background: var(--c-border-subtle); margin: 0 var(--s-1); }
-
-  .actions-inline { display: flex; gap: var(--s-2); align-items: center; }
-  .actions-inline[hidden] { display: none; }
-
-  /* A disabled control still has to be legible: 0.45 opacity pushed the label
-     under 3:1. Muted colours say "unavailable" without dissolving the text. */
-  button[disabled] {
-    cursor: default;
-    color: var(--c-text-muted);
-    border-color: var(--c-border-subtle);
-    background: var(--c-surface-sunken);
-  }
-  button[disabled]:hover { border-color: var(--c-border-subtle); }
-
-  main { overflow: auto; }
-
-  .screen {
-    display: grid;
-    place-content: center;
-    justify-items: center;
-    gap: var(--s-4);
-    padding: var(--s-12);
-    text-align: center;
-    max-width: 34rem;
-    margin: 0 auto;
-  }
-  .screen h2 { margin: 0; font-size: var(--fs-xl); }
-  .screen p { margin: 0; color: var(--c-text-muted); }
-  .actions { display: flex; gap: var(--s-3); margin-top: var(--s-4); }
-  code { font-family: var(--font-mono); font-size: var(--fs-sm); }
-  .error { color: var(--c-error); }
-`);
+const styles = sheet(css);
 
 export class AppRoot extends HTMLElement {
   #main;
@@ -71,6 +27,8 @@ export class AppRoot extends HTMLElement {
   #toolbar;
   #notices;
   #buttons = {};
+  #depth = {};
+  #focal;
   #tree = null;
   #editor = null;
   #importer = null;
@@ -88,6 +46,9 @@ export class AppRoot extends HTMLElement {
       class: 'status',
       attrs: { role: 'status', 'aria-live': 'polite' },
     });
+
+    // Says who the tree is centred on, so re-rooting stops looking arbitrary.
+    this.#focal = el('span', { class: 'focal' });
 
     this.#main = el('main');
     this.#notices = document.createElement('app-notice');
@@ -108,6 +69,10 @@ export class AppRoot extends HTMLElement {
     this.addEventListener('person:delete', this.#onPersonDelete);
     this.addEventListener('import:merge', this.#onImportMerge);
     this.addEventListener('import:new', this.#onImportNew);
+    this.addEventListener('person:reveal', this.#onPersonReveal);
+    this.addEventListener('photos:add', this.#onPhotosAdd);
+    this.addEventListener('photo:portrait', this.#onPhotoPortrait);
+    this.addEventListener('photo:remove', this.#onPhotoRemove);
 
     this.#render();
   }
@@ -125,6 +90,10 @@ export class AppRoot extends HTMLElement {
     this.removeEventListener('person:delete', this.#onPersonDelete);
     this.removeEventListener('import:merge', this.#onImportMerge);
     this.removeEventListener('import:new', this.#onImportNew);
+    this.removeEventListener('person:reveal', this.#onPersonReveal);
+    this.removeEventListener('photos:add', this.#onPhotosAdd);
+    this.removeEventListener('photo:portrait', this.#onPhotoPortrait);
+    this.removeEventListener('photo:remove', this.#onPhotoRemove);
   }
 
   /** The requirements screen is set by main.js before anything else starts. */
@@ -157,6 +126,9 @@ export class AppRoot extends HTMLElement {
         el('div', { class: 'divider' }),
         make('export', S.toolbar.exportZip, () => this.#exportArchive()),
         make('import', S.toolbar.importZip, () => this.#startImport()),
+        el('div', { class: 'divider' }),
+        this.#depthPicker('up', S.toolbar.ancestors, S.toolbar.generationsUp),
+        this.#depthPicker('down', S.toolbar.descendants, S.toolbar.generationsDown),
       ],
     });
 
@@ -165,18 +137,48 @@ export class AppRoot extends HTMLElement {
         el('h1', { text: S.app.name }),
         this.#toolbar,
         el('div', { class: 'spacer' }),
+        this.#focal,
         this.#status,
       ],
     });
   }
 
+  /** How many generations are drawn in one direction. */
+  #depthPicker(key, label, description) {
+    const select = document.createElement('select');
+    select.setAttribute('aria-label', description);
+    select.title = description;
+
+    for (let depth = 0; depth <= 8; depth += 1) {
+      select.append(el('option', { text: String(depth), attrs: { value: depth } }));
+    }
+
+    select.addEventListener('change', () =>
+      actions.setGenerationWindow({ [key]: Number(select.value) }),
+    );
+
+    this.#depth[key] = select;
+    return el('label', { class: 'depth', children: [el('span', { text: label }), select] });
+  }
+
   #syncToolbar() {
     const open = store.isOpen && store.focalPersonId !== null;
     this.#toolbar.hidden = !open;
+    this.#focal.hidden = !open;
     if (!open) return;
 
     this.#buttons.undo.disabled = !store.canUndo;
     this.#buttons.redo.disabled = !store.canRedo;
+
+    this.#depth.up.value = String(store.project.settings.maxGenerationsUp);
+    this.#depth.down.value = String(store.project.settings.maxGenerationsDown);
+
+    const name = displayName(store.graph.persons.get(store.focalPersonId));
+    this.#focal.title = `${S.toolbar.centredOn} ${name}`;
+    setChildren(this.#focal, [
+      el('span', { text: `${S.toolbar.centredOn} ` }),
+      el('b', { text: name }),
+    ]);
   }
 
   #onSaving = () => this.#setStatus(S.tree.saving);
@@ -238,9 +240,73 @@ export class AppRoot extends HTMLElement {
 
     if (!this.#editor) {
       this.#editor = document.createElement('person-editor');
+      this.#editor.resolvePhoto = (path) => store.photoUrl(path);
       this.shadowRoot.append(this.#editor);
     }
-    this.#editor.open(person);
+    this.#editor.open(person, {
+      photos: mediaOf(store.graph, personId),
+      issues: store.issuesFor(personId),
+      graph: store.graph,
+    });
+  }
+
+  /**
+   * Jumping to someone named in a note. Closes the editor first: the point of
+   * the jump is to look at the tree.
+   */
+  #onPersonReveal = (event) => {
+    this.#editor?.close();
+    store.setFocalPerson(event.detail.personId);
+  };
+
+  // --- Photos --------------------------------------------------------------
+
+  #onPhotosAdd = (event) => {
+    const { personId } = event.detail;
+
+    void this.#guarded(async () => {
+      const result = await actions.addPhotosFor(personId);
+      if (result.cancelled) return;
+
+      this.#editor?.refreshPhotos(mediaOf(store.graph, personId));
+      this.#reportPhotoImport(result);
+    });
+  };
+
+  #onPhotoPortrait = (event) => {
+    const { mediaId, personId } = event.detail;
+    actions.setPortrait(mediaId, personId);
+    this.#editor?.refreshPhotos(mediaOf(store.graph, personId));
+  };
+
+  #onPhotoRemove = (event) => {
+    const { mediaId, personId } = event.detail;
+    actions.removePhotoFrom(mediaId, personId);
+    this.#editor?.refreshPhotos(mediaOf(store.graph, personId));
+  };
+
+  /** One unreadable file must not hide the fact that the others worked. */
+  #reportPhotoImport({ added = 0, reused = 0, failed = [] }) {
+    const detail = [
+      reused > 0 ? S.editor.photosReused(reused) : '',
+      failed.length > 0 ? S.editor.photosFailed(failed.length) : '',
+    ]
+      .filter(Boolean)
+      .join(' · ');
+
+    if (added === 0 && reused === 0) {
+      this.#notices.show({
+        severity: 'error',
+        title: failed[0]?.message ?? S.editor.photosFailed(failed.length),
+      });
+      return;
+    }
+
+    this.#notices.show({
+      severity: failed.length > 0 ? 'warning' : 'success',
+      title: S.editor.photosAdded(added),
+      detail,
+    });
   }
 
   /**
@@ -356,6 +422,7 @@ export class AppRoot extends HTMLElement {
       graph: store.graph,
       focalId: store.focalPersonId,
       issuesFor: (id) => store.issuesFor(id),
+      resolvePhoto: (path) => store.photoUrl(path),
     });
   };
 

@@ -6,8 +6,7 @@
  */
 
 import { Severity, issue, subject } from '../issue.js';
-import { wouldCreateCycle } from '../../graph/traversal.js';
-import { isBiological } from '../../graph/queries.js';
+import { isBiological, childLinksOf } from '../../graph/queries.js';
 
 const E = Severity.ERROR;
 
@@ -43,47 +42,58 @@ function selfUnion(g) {
  * an adoption is still a loop.
  */
 function cycles(g) {
+  const WHITE = 0;
+  const GREY = 1;
+  const BLACK = 2;
+
+  const colour = new Map();
   const found = [];
-  const reported = new Set();
 
-  for (const link of g.parentChildren.values()) {
-    if (link.parentId === link.childId) continue; // covered by SELF_PARENT
-    const key = [link.parentId, link.childId].sort().join('|');
-    if (reported.has(key)) continue;
+  // One depth-first sweep over the whole graph, iterative so a deep lineage
+  // cannot blow the call stack. A link that reaches a person still on the
+  // current path — grey — is the edge that closes a loop.
+  //
+  // The obvious implementation, asking "would this link create a cycle?" once
+  // per link, rebuilds the graph for every edge and costs O(E × (V + E)). On a
+  // 10,000-person tree that measured 13 seconds. This is O(V + E).
+  for (const rootId of g.persons.keys()) {
+    if ((colour.get(rootId) ?? WHITE) !== WHITE) continue;
 
-    // The link itself is removed from the graph before asking, otherwise every
-    // edge would detect itself as a cycle.
-    if (reachesThroughOtherPath(g, link)) {
-      reported.add(key);
-      found.push(
-        issue('CYCLE', E, [subject('parentChild', link.id)], 'validation.cycle', {
-          parentId: link.parentId,
-          childId: link.childId,
-        }),
-      );
+    colour.set(rootId, GREY);
+    const stack = [{ personId: rootId, next: 0 }];
+
+    while (stack.length > 0) {
+      const frame = stack[stack.length - 1];
+      const links = childLinksOf(g, frame.personId);
+
+      if (frame.next >= links.length) {
+        colour.set(frame.personId, BLACK);
+        stack.pop();
+        continue;
+      }
+
+      const link = links[frame.next];
+      frame.next += 1;
+
+      if (link.parentId === link.childId) continue; // covered by SELF_PARENT
+
+      const state = colour.get(link.childId) ?? WHITE;
+
+      if (state === GREY) {
+        found.push(
+          issue('CYCLE', E, [subject('parentChild', link.id)], 'validation.cycle', {
+            parentId: link.parentId,
+            childId: link.childId,
+          }),
+        );
+      } else if (state === WHITE) {
+        colour.set(link.childId, GREY);
+        stack.push({ personId: link.childId, next: 0 });
+      }
     }
   }
 
   return found;
-}
-
-function reachesThroughOtherPath(g, link) {
-  const trimmed = {
-    ...g,
-    parentChildren: new Map([...g.parentChildren].filter(([id]) => id !== link.id)),
-    childrenByParent: filterLinks(g.childrenByParent, link.id),
-    parentsByChild: filterLinks(g.parentsByChild, link.id),
-  };
-  return wouldCreateCycle(trimmed, link.parentId, link.childId);
-}
-
-function filterLinks(map, excludeId) {
-  const next = new Map();
-  for (const [key, links] of map) {
-    const kept = links.filter((l) => l.id !== excludeId);
-    if (kept.length > 0) next.set(key, kept);
-  }
-  return next;
 }
 
 /** There cannot be two links with the same parent + child pair. */

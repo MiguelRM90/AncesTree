@@ -31,6 +31,15 @@ export const Certainty = { CONFIRMED: 'CONFIRMED', PROBABLE: 'PROBABLE', DISPUTE
 
 export const MediaKind = { PHOTO: 'PHOTO', DOCUMENT: 'DOCUMENT' };
 
+/** A person has at most one PORTRAIT; everything else is an attachment. */
+export const MediaRole = { PORTRAIT: 'PORTRAIT', ATTACHMENT: 'ATTACHMENT' };
+
+export const mediaLink = (targetId, role = MediaRole.ATTACHMENT) => ({
+  targetType: 'person',
+  targetId,
+  role,
+});
+
 export const newId = () => crypto.randomUUID();
 
 const now = () => new Date().toISOString();

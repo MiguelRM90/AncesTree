@@ -1,6 +1,13 @@
 import { expect } from '@open-wc/testing';
 import { buildIndexes } from '../src/domain/graph/indexes.js';
-import { validateAll, validateBlocking, Severity } from '../src/domain/validation/engine.js';
+import {
+  validateAll,
+  validateBlocking,
+  blockingKeys,
+  introducedBy,
+  issueKey,
+  Severity,
+} from '../src/domain/validation/engine.js';
 import { describeIssue, issueLine } from '../src/ui/issue-text.js';
 import { createParentChild, createUnion, Sex } from '../src/domain/model/factories.js';
 import { parseDate } from '../src/domain/date/parse.js';
@@ -80,10 +87,27 @@ describe('temporal rules', () => {
 
   // The core case of the whole severity policy: overlapping fuzzy dates NEVER
   // block a save.
-  it('only WARNs when fuzzy dates overlap', () => {
+  it('only WARNs when the written dates look inverted', () => {
     const p = person('X', { born: 'ABT 1900', died: '1898' });
     const data = project({ persons: [p] });
     expect(find(run(data), 'DEATH_BEFORE_BIRTH').severity).to.equal(Severity.WARNING);
+  });
+
+  /**
+   * "Cannot be ruled out" is the normal state of a genealogical date, not a
+   * problem. AFT 1700 and BEF 1755 overlap as intervals — [1701, ∞) against
+   * (-∞, 1754] — and there is nothing odd about them.
+   */
+  it('stays quiet when open-ended dates merely overlap', () => {
+    const p = person('X', { born: 'AFT 1700', died: 'BEF 1755' });
+    expect(idsOf(run(project({ persons: [p] })))).to.not.include('DEATH_BEFORE_BIRTH');
+  });
+
+  it('still catches an inversion hidden behind open bounds', () => {
+    const p = person('X', { born: 'AFT 1900', died: 'BEF 1880' });
+    expect(find(run(project({ persons: [p] })), 'DEATH_BEFORE_BIRTH').severity).to.equal(
+      Severity.ERROR,
+    );
   });
 
   it('never blocks on a very young parent', () => {
@@ -172,6 +196,38 @@ describe('coherence rules', () => {
     expect(validateBlocking(buildIndexes(data))).to.eql([]);
   });
 
+  /**
+   * The ancestor is named for context, not accused of anything. Listing them
+   * as a subject put every descendant's cousin marriage on their card: one
+   * founder carried eleven notes, none of which were about him.
+   */
+  it('puts a consanguinity note on the couple, not on their ancestor', () => {
+    const ancestor = person('Ancestor', { born: '1850' });
+    const a = person('A', { born: '1880' });
+    const b = person('B', { born: '1882' });
+    const child = person('Child', { born: '1910' });
+
+    const union = createUnion({ partner1Id: a.id, partner2Id: b.id });
+    const data = project({
+      persons: [ancestor, a, b, child],
+      unions: [union],
+      parentChildren: [
+        createParentChild({ parentId: ancestor.id, childId: a.id }),
+        createParentChild({ parentId: ancestor.id, childId: b.id }),
+        createParentChild({ parentId: a.id, childId: child.id, unionId: union.id }),
+        createParentChild({ parentId: b.id, childId: child.id, unionId: union.id }),
+      ],
+    });
+
+    const found = find(run(data), 'CONSANGUINEOUS_UNION');
+    const subjects = found.subjects.map((s) => s.id);
+
+    expect(subjects).to.include(a.id);
+    expect(subjects).to.include(b.id);
+    expect(subjects).to.not.include(ancestor.id);
+    expect(found.params.ancestorId).to.equal(ancestor.id);
+  });
+
   it('keeps completeness notes at INFO', () => {
     const p = person('Nameless');
     p.lastName = '';
@@ -234,12 +290,93 @@ describe('issue text', () => {
     expect(issueLine(blocking, graph)).to.equal(`${title} (${detail})`);
   });
 
+  /**
+   * "These partners share a common ancestor" is useless on its own: the whole
+   * question it raises is which ancestor. The name has to be in the text, and
+   * the person has to be reachable from it.
+   */
+  it('names the shared ancestor and offers them as somewhere to go', () => {
+    const ancestor = person('Ancestor', { born: '1850' });
+    const a = person('A', { born: '1880' });
+    const b = person('B', { born: '1882' });
+    const child = person('Child', { born: '1910' });
+    const union = createUnion({ partner1Id: a.id, partner2Id: b.id });
+
+    const graph = buildIndexes(
+      project({
+        persons: [ancestor, a, b, child],
+        unions: [union],
+        parentChildren: [
+          createParentChild({ parentId: ancestor.id, childId: a.id }),
+          createParentChild({ parentId: ancestor.id, childId: b.id }),
+          createParentChild({ parentId: a.id, childId: child.id, unionId: union.id }),
+          createParentChild({ parentId: b.id, childId: child.id, unionId: union.id }),
+        ],
+      }),
+    );
+
+    const found = validateAll(graph).find((i) => i.ruleId === 'CONSANGUINEOUS_UNION');
+    const readable = describeIssue(found, graph);
+
+    expect(readable.context).to.contain('Ancestor Doe');
+    expect(issueLine(found, graph)).to.contain('Ancestor Doe');
+    expect(readable.people.map((p) => p.id)).to.include(ancestor.id);
+    expect(readable.people.find((p) => p.id === ancestor.id).role).to.equal('ancestor');
+  });
+
   it('degrades to the message alone when no graph is given', () => {
     const graph = buildIndexes(scenarios());
     const blocking = validateAll(graph).find((i) => i.ruleId === 'PARENT_BORN_AFTER_CHILD');
 
     expect(describeIssue(blocking).detail).to.equal('');
     expect(issueLine(blocking)).to.equal('This parent was born after their child.');
+  });
+});
+
+/**
+ * A project imported from another application arrives with impossible data in
+ * it — that is normal, not exceptional. If every later edit were refused until
+ * all of it was fixed, the archive would be read-only exactly when the user
+ * needs to repair it.
+ */
+describe('pre-existing damage', () => {
+  let damaged;
+  let known;
+
+  beforeEach(() => {
+    // A parent born after their child: a blocking error, already in the file.
+    const parent = person('Parent', { born: '1950' });
+    const child = person('Child', { born: '1920' });
+
+    damaged = project({
+      persons: [parent, child],
+      parentChildren: [createParentChild({ parentId: parent.id, childId: child.id })],
+    });
+
+    known = blockingKeys(validateAll(buildIndexes(damaged)));
+  });
+
+  it('does not count an error that was already there', () => {
+    expect(known.size).to.equal(1);
+    expect(introducedBy(known, validateBlocking(buildIndexes(damaged)))).to.eql([]);
+  });
+
+  it('still catches a new error in an already damaged project', () => {
+    const loop = damaged.persons[0];
+    damaged.parentChildren.push(createParentChild({ parentId: loop.id, childId: loop.id }));
+
+    const introduced = introducedBy(known, validateBlocking(buildIndexes(damaged)));
+    expect(introduced.map((i) => i.ruleId)).to.include('SELF_PARENT');
+  });
+
+  // Two runs of the validator produce different objects for the same problem,
+  // so identity has to come from the rule and the people, not the reference.
+  it('identifies an issue by rule and subjects, not by object identity', () => {
+    const first = validateAll(buildIndexes(damaged))[0];
+    const second = validateAll(buildIndexes(damaged))[0];
+
+    expect(first).to.not.equal(second);
+    expect(issueKey(first)).to.equal(issueKey(second));
   });
 });
 

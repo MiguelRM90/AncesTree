@@ -6,68 +6,26 @@
  * (data-model.md, genealogical dates).
  */
 
-import { el, emit } from '../dom.js';
+import { el, emit, setChildren } from '../dom.js';
 import { base, sheet } from '../styles/sheets.js';
+import css from './person-editor.css?inline';
 import { S } from '../../config/strings.js';
+import { describeIssue } from '../issue-text.js';
 import { parseDate } from '../../domain/date/parse.js';
-import { Sex } from '../../domain/model/factories.js';
+import { Sex, MediaRole } from '../../domain/model/factories.js';
 import './date-field.js';
+import './person-photo.js';
 
-const styles = sheet(`
-  dialog {
-    border: 1px solid var(--c-border-subtle);
-    border-radius: var(--radius);
-    background: var(--c-surface);
-    color: var(--c-text);
-    padding: 0;
-    width: min(32rem, 92vw);
-    box-shadow: var(--shadow);
-  }
-  dialog::backdrop { background: rgb(0 0 0 / 35%); }
-
-  .body { display: grid; gap: var(--s-4); padding: var(--s-6); }
-  h2 { margin: 0; font-size: var(--fs-lg); }
-
-  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-3); }
-  label { display: grid; gap: var(--s-1); font-size: var(--fs-sm); color: var(--c-text-muted); }
-
-  input, select, textarea {
-    font: inherit;
-    color: var(--c-text);
-    background: var(--c-bg);
-    border: 1px solid var(--c-border);
-    border-radius: var(--radius-sm);
-    padding: var(--s-2);
-  }
-  textarea { resize: vertical; min-height: 4rem; }
-
-  fieldset {
-    border: 1px solid var(--c-border-subtle);
-    border-radius: var(--radius-sm);
-    padding: var(--s-3);
-    display: grid;
-    gap: var(--s-3);
-    margin: 0;
-  }
-  legend { font-size: var(--fs-sm); color: var(--c-text-muted); padding: 0 var(--s-1); }
-
-  .note { font-size: var(--fs-sm); color: var(--c-text-muted); }
-
-  footer {
-    display: flex;
-    gap: var(--s-2);
-    justify-content: flex-end;
-    padding: var(--s-3) var(--s-6);
-    border-top: 1px solid var(--c-border-subtle);
-    background: var(--c-surface-sunken);
-  }
-  footer .danger { margin-right: auto; color: var(--c-error); border-color: var(--c-error); }
-`);
+const styles = sheet(css);
 
 export class PersonEditor extends HTMLElement {
   #dialog;
   #fields = {};
   #person = null;
+  #photos = [];
+  #issues = [];
+  #graph = null;
+  #resolvePhoto = null;
 
   constructor() {
     super();
@@ -77,9 +35,23 @@ export class PersonEditor extends HTMLElement {
     root.append(this.#dialog);
   }
 
-  /** Opens the editor for a person. The caller keeps ownership of the data. */
-  open(person) {
+  /** @param {(path: string) => Promise<string|null>} fn */
+  set resolvePhoto(fn) {
+    this.#resolvePhoto = fn;
+  }
+
+  /**
+   * Opens the editor for a person. The caller keeps ownership of the data.
+   * @param {object} person
+   * @param {{photos?: object[], issues?: object[], graph?: object}} [context]
+   */
+  open(person, { photos = [], issues = [], graph = null } = {}) {
     this.#person = person;
+    this.#photos = photos;
+    this.#issues = issues;
+    this.#graph = graph;
+    this.#renderGallery();
+    this.#renderReview();
 
     this.#fields.firstName.value = person.firstName;
     this.#fields.lastName.value = person.lastName;
@@ -118,6 +90,8 @@ export class PersonEditor extends HTMLElement {
     this.#fields.deathPlace = input();
     this.#fields.notes = document.createElement('textarea');
     this.#fields.placeholderNote = el('p', { class: 'note', text: S.editor.materialise });
+    this.#fields.gallery = el('div', { class: 'gallery' });
+    this.#fields.review = el('div', { class: 'issues' });
 
     const save = el('button', { class: 'primary', text: S.editor.save, attrs: { type: 'button' } });
     const cancel = el('button', { text: S.editor.cancel, attrs: { type: 'button' } });
@@ -155,13 +129,139 @@ export class PersonEditor extends HTMLElement {
           labelled(S.editor.sex, this.#fields.sex),
           this.#eventFieldset(S.editor.birth, 'birth'),
           this.#eventFieldset(S.editor.death, 'death'),
+          this.#photoFieldset(),
           labelled(S.editor.notes, this.#fields.notes),
+          this.#reviewFieldset(),
         ],
       }),
       el('footer', { children: [remove, cancel, save] }),
     );
 
     return dialog;
+  }
+
+  #reviewFieldset() {
+    const fieldset = document.createElement('fieldset');
+    fieldset.append(el('legend', { text: S.editor.review }), this.#fields.review);
+    return fieldset;
+  }
+
+  /**
+   * The validation notes for this person, with every named person turned into
+   * a button that centres the tree on them.
+   *
+   * "These partners share a common ancestor" is useless on its own — the whole
+   * question it raises is *which* ancestor, and finding them by hand across a
+   * large archive is a chore.
+   */
+  #renderReview() {
+    if (this.#issues.length === 0) {
+      setChildren(this.#fields.review, [el('p', { class: 'note', text: S.editor.noIssues })]);
+      return;
+    }
+
+    setChildren(
+      this.#fields.review,
+      this.#issues.map((found) => {
+        const { title, context, people } = describeIssue(found, this.#graph);
+
+        const chips = people
+          .filter((person) => person.id !== this.#person.id)
+          .map((person) => {
+            const button = el('button', {
+              text: person.name,
+              attrs: { type: 'button', title: S.editor.showPerson(person.name) },
+            });
+            button.addEventListener('click', () =>
+              emit(this, 'person:reveal', { personId: person.id }),
+            );
+            return button;
+          });
+
+        return el('div', {
+          class: 'issue',
+          attrs: { 'data-severity': found.severity },
+          children: [
+            el('p', { class: 'what', text: [title, context].filter(Boolean).join(' ') }),
+            chips.length > 0 ? el('div', { class: 'who', children: chips }) : null,
+          ],
+        });
+      }),
+    );
+  }
+
+  #photoFieldset() {
+    const add = el('button', { text: S.editor.addPhotos, attrs: { type: 'button' } });
+    // The dialog stays open: adding photos is a side operation on a person who
+    // already exists, not part of saving the form.
+    add.addEventListener('click', () => emit(this, 'photos:add', { personId: this.#person.id }));
+
+    const fieldset = document.createElement('fieldset');
+    fieldset.append(
+      el('legend', { text: S.editor.photos }),
+      this.#fields.gallery,
+      el('div', { children: [add] }),
+      el('p', { class: 'note', text: S.editor.exifStripped }),
+    );
+
+    return fieldset;
+  }
+
+  /** Rebuilt whenever the person's photos change. */
+  #renderGallery() {
+    const person = this.#person;
+
+    if (this.#photos.length === 0) {
+      setChildren(this.#fields.gallery, [el('p', { class: 'note', text: S.editor.noPhotos })]);
+      return;
+    }
+
+    setChildren(
+      this.#fields.gallery,
+      this.#photos.map((item) => {
+        const isPortrait = item.links.some(
+          (link) => link.targetId === person.id && link.role === MediaRole.PORTRAIT,
+        );
+
+        const photo = document.createElement('person-photo');
+        photo.resolve = this.#resolvePhoto;
+        photo.person = person;
+        photo.path = item.path;
+
+        const promote = el('button', {
+          text: '★',
+          attrs: { type: 'button', title: S.editor.makePortrait, 'aria-label': S.editor.makePortrait },
+        });
+        promote.disabled = isPortrait;
+        promote.addEventListener('click', () =>
+          emit(this, 'photo:portrait', { mediaId: item.id, personId: person.id }),
+        );
+
+        const drop = el('button', {
+          text: '×',
+          attrs: { type: 'button', title: S.editor.removePhoto, 'aria-label': S.editor.removePhoto },
+        });
+        drop.addEventListener('click', () =>
+          emit(this, 'photo:remove', { mediaId: item.id, personId: person.id }),
+        );
+
+        return el('div', {
+          class: 'shot',
+          attrs: { 'data-portrait': isPortrait || null },
+          children: [
+            photo,
+            isPortrait ? el('span', { class: 'tag', text: S.editor.portrait }) : null,
+            el('div', { class: 'shot-actions', children: [promote, drop] }),
+          ],
+        });
+      }),
+    );
+  }
+
+  /** Called by the parent after the photo list changed, without reopening. */
+  refreshPhotos(photos) {
+    this.#photos = photos;
+    this.#renderGallery();
   }
 
   #eventFieldset(legendText, prefix) {

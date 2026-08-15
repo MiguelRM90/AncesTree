@@ -23,8 +23,16 @@ import {
   importAsNewProject,
   importByMerging,
 } from '../storage/archive.js';
-import { createPerson, createUnion, createParentChild } from '../domain/model/factories.js';
-import { unionsOf, partnerIn } from '../domain/graph/queries.js';
+import { pickImages, importPhoto } from '../storage/media.js';
+import { release } from '../storage/media-cache.js';
+import {
+  createPerson,
+  createUnion,
+  createParentChild,
+  mediaLink,
+  MediaRole,
+} from '../domain/model/factories.js';
+import { unionsOf, partnerIn, mediaOf } from '../domain/graph/queries.js';
 
 export { recentProjects };
 
@@ -215,6 +223,139 @@ export function addChildFor(parentId) {
   );
 
   return result.ok ? { ...result, person: child } : result;
+}
+
+/**
+ * How many generations the tree renders around the centred person.
+ *
+ * This is the only real defence against a huge archive: the window bounds how
+ * much is on screen, and therefore how much has to be laid out and painted.
+ * Not recorded in the undo history — it is a view setting, not an edit.
+ */
+export function setGenerationWindow({ up, down }) {
+  return store.apply(
+    (project) => ({
+      ...project,
+      settings: {
+        ...project.settings,
+        maxGenerationsUp: up ?? project.settings.maxGenerationsUp,
+        maxGenerationsDown: down ?? project.settings.maxGenerationsDown,
+      },
+    }),
+    { label: 'view depth', record: false },
+  );
+}
+
+// --- Photos ----------------------------------------------------------------
+
+/**
+ * Adds one or more photos to a person.
+ *
+ * Files are written to disk first and the graph is updated afterwards, in a
+ * single mutation: there is never a moment where a MediaObject points at a file
+ * that does not exist yet.
+ *
+ * @returns {Promise<{ok: boolean, added?: number, reused?: number, failed?: object[]}>}
+ */
+export async function addPhotosFor(personId) {
+  if (!store.isOpen) return { ok: false, reason: 'none' };
+
+  const files = await pickImages();
+  if (files.length === 0) return { ok: false, cancelled: true };
+
+  const stripExif = store.project.settings.stripExifOnImport;
+  const known = store.project.media;
+
+  const fresh = [];
+  const reused = [];
+  const failed = [];
+
+  for (const file of files) {
+    try {
+      const result = await importPhoto(store.directoryHandle, file, [...known, ...fresh], {
+        stripExif,
+      });
+      (result.reused ? reused : fresh).push(result.media);
+    } catch (error) {
+      // One unreadable file must not lose the rest of the selection.
+      failed.push({ name: file.name, message: error.message });
+    }
+  }
+
+  const attaching = [...fresh, ...reused];
+  if (attaching.length === 0) return { ok: false, failed };
+
+  const hasPortrait = mediaOf(store.graph, personId).length > 0;
+
+  const result = store.apply(
+    (project) => {
+      const byId = new Map(project.media.map((item) => [item.id, item]));
+
+      for (const [index, item] of attaching.entries()) {
+        const existing = byId.get(item.id) ?? item;
+        const alreadyLinked = existing.links.some((link) => link.targetId === personId);
+
+        // The first photo a person gets becomes their portrait.
+        const role = !hasPortrait && index === 0 ? MediaRole.PORTRAIT : MediaRole.ATTACHMENT;
+
+        byId.set(item.id, {
+          ...existing,
+          links: alreadyLinked ? existing.links : [...existing.links, mediaLink(personId, role)],
+        });
+      }
+
+      return { ...project, media: [...byId.values()] };
+    },
+    { label: 'add photos' },
+  );
+
+  return { ...result, added: fresh.length, reused: reused.length, failed };
+}
+
+/** Promotes one photo to be the person's portrait. */
+export function setPortrait(mediaId, personId) {
+  return store.apply(
+    (project) => ({
+      ...project,
+      media: project.media.map((item) => ({
+        ...item,
+        links: item.links.map((link) =>
+          link.targetId !== personId
+            ? link
+            : { ...link, role: item.id === mediaId ? MediaRole.PORTRAIT : MediaRole.ATTACHMENT },
+        ),
+      })),
+    }),
+    { label: 'set portrait' },
+  );
+}
+
+/**
+ * Detaches a photo from a person.
+ *
+ * The file on disk is left alone: it may still belong to someone else, and a
+ * photo of a group is exactly the case where it does. Files nobody references
+ * any more are surfaced as ORPHAN_MEDIA and removed by an explicit maintenance
+ * pass, never silently (storage.md, binaries).
+ */
+export function removePhotoFrom(mediaId, personId) {
+  const item = store.graph?.media.get(mediaId);
+  const stillUsed = item?.links.some((link) => link.targetId !== personId);
+  if (item && !stillUsed) release(item.path);
+
+  return store.apply(
+    (project) => ({
+      ...project,
+      media: project.media
+        .map((media) =>
+          media.id !== mediaId
+            ? media
+            : { ...media, links: media.links.filter((link) => link.targetId !== personId) },
+        )
+        .filter((media) => media.links.length > 0),
+    }),
+    { label: 'remove photo' },
+  );
 }
 
 export function removeEntity(kind, id) {

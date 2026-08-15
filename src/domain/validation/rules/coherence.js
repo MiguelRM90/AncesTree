@@ -26,19 +26,31 @@ function consanguineousUnions(g) {
   const found = [];
 
   for (const union of g.unions.values()) {
-    const hasChildren = [...g.parentChildren.values()].some((l) => l.unionId === union.id);
-    if (!hasChildren) continue;
+    if (!g.childrenByUnion.has(union.id)) continue;
 
     const common = closestCommonAncestor(
       g, union.partner1Id, union.partner2Id, CONSANGUINITY_MAX_DEPTH,
     );
     if (!common) continue;
 
+    // The subjects are the couple, NOT the shared ancestor.
+    //
+    // The ancestor was in this list so the interface could name them, and the
+    // effect was that every warning landed on their card: one founder was
+    // carrying eleven notes, none of which were about him, because eleven of
+    // his descendants had married cousins. Context belongs in params.
     found.push(
-      issue('CONSANGUINEOUS_UNION', WARNING,
-        [subject('union', union.id), subject('person', common.ancestorId)],
+      issue(
+        'CONSANGUINEOUS_UNION',
+        WARNING,
+        [
+          subject('union', union.id),
+          subject('person', union.partner1Id),
+          subject('person', union.partner2Id),
+        ],
         'validation.consanguineousUnion',
-        { generations: Math.max(common.depthA, common.depthB) }),
+        { ancestorId: common.ancestorId, generations: Math.max(common.depthA, common.depthB) },
+      ),
     );
   }
 
@@ -70,6 +82,7 @@ function siblingAsParent(g) {
 /** Completeness. All INFO, all review-panel only. */
 function completeness(g) {
   const found = [];
+  const thisYear = new Date().getUTCFullYear();
 
   for (const person of g.persons.values()) {
     if (person.isPlaceholder) continue;
@@ -97,7 +110,7 @@ function completeness(g) {
     const bornAt = person.birth?.date?.latest ?? null;
     if (bornAt !== null && !person.death?.date?.raw) {
       const year = Number(bornAt.slice(0, 4));
-      if (new Date().getUTCFullYear() - year > MAX_LIFESPAN_YEARS) {
+      if (thisYear - year > MAX_LIFESPAN_YEARS) {
         found.push(
           issue('LIVING_PERSON_NO_DEATH', INFO, subjects, 'validation.livingPersonNoDeath'),
         );

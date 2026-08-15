@@ -1,0 +1,37 @@
+/**
+ * width: max-content is load-bearing, not cosmetic.
+ *
+ * As a plain block, the host is only as wide as the scroll container while
+ * the rows overflow far past it. The SVG layer, sized to the host, then
+ * covered a fraction of the tree: lines were squashed into the visible width
+ * and simply did not exist once you scrolled sideways.
+ */
+:host {
+  display: block;
+  position: relative;
+  padding: var(--s-8);
+  width: max-content;
+  min-width: 100%;
+}
+
+.rows { position: relative; display: grid; gap: var(--row-gap); justify-items: center; }
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: var(--node-gap);
+}
+
+/* Layout spacers: empty, invisible elements that reserve room between
+   branches to avoid overlap and keep the layout symmetric. NOT to be confused
+   with the model's placeholder people. */
+.spacer { width: var(--s-8); flex: 0 0 auto; }
+
+.hint {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
