@@ -2,7 +2,11 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    # Both, so the deployment does not silently never run because of the branch
+    # name. When it does not run, Pages falls back to serving the repository
+    # root: the raw index.html, with its %CSP% placeholder unreplaced and its
+    # script pointing at /src/main.js, which only exists during development.
+    branches: [main, master]
   workflow_dispatch:
 
 permissions:
