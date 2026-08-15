@@ -232,29 +232,75 @@ describe('layout', () => {
     });
 
     /**
-     * With one uniform gap, one couple's children sat exactly as far from each
-     * other as from the next family's, so there was no way to see where a set
-     * of siblings ended.
+     * THE reason this engine assigns coordinates at all.
+     *
+     * Leaving placement to CSS centred every row on its own, with no
+     * relationship between where a couple sat and where their children sat. A
+     * couple could end up at one end of the tree and their children at the
+     * other, with the bar joining them running the width of the screen.
+     *
+     * The target is the span of the children's own CARDS. Centring over their
+     * blocks instead — which also hold their spouses — left the couple half a
+     * couple to one side of the bar their line drops onto.
      */
-    it('separates families more than it separates couples', () => {
-      const { father, data } = threeMarriedChildren();
+    it('centres a couple over the cards of their children', () => {
+      const { father, children, data } = threeMarriedChildren();
       const g = buildIndexes(data);
+      const layout = buildLayout(g, father.id, { up: 0, down: 1 });
 
-      const spacers = buildLayout(g, father.id, { up: 0, down: 1 })
-        .rows.find((row) => row.level === 1)
-        .nodes.filter((node) => node.type === NodeType.SPACER);
+      const byId = new Map(layout.nodes.map((node) => [node.id, node]));
+      const dot = layout.nodes.find((node) => node.type === NodeType.UNION);
+      const kids = children.map((child) => byId.get(`p:${child.id}`));
 
-      // All three children share parents, so every gap here is a couple gap.
-      expect(spacers.map((s) => s.size)).to.eql(['couple', 'couple']);
+      const left = Math.min(...kids.map((kid) => kid.x));
+      const right = Math.max(...kids.map((kid) => kid.x + kid.width));
+
+      expect(dot.x + dot.width / 2).to.be.closeTo((left + right) / 2, 0.5);
     });
 
-    it('does not leave a trailing spacer at the end of a row', () => {
-      const { father, data } = threeMarriedChildren();
-      const g = buildIndexes(data);
+    it('leaves a wider gap between families than between couples', () => {
+      // The focal couple, two married children, and grandchildren on both
+      // sides: the bottom row then holds two separate families.
+      const focal = person('Focal', { born: '1900' });
+      const spouse = person('Spouse', { born: '1902' });
+      const focalUnion = createUnion({ partner1Id: focal.id, partner2Id: spouse.id });
 
-      for (const row of buildLayout(g, father.id, { up: 0, down: 1 }).rows) {
-        expect(row.nodes[row.nodes.length - 1].type).to.not.equal(NodeType.SPACER);
-      }
+      const branches = ['A', 'B'].map((tag, index) => {
+        const child = person(`Child${tag}`, { born: `192${index * 2}` });
+        const inLaw = person(`InLaw${tag}`, { born: '1925' });
+        const union = createUnion({ partner1Id: child.id, partner2Id: inLaw.id });
+        const kids = [0, 1].map((n) => person(`Kid${tag}${n}`, { born: `195${n}` }));
+        return { child, inLaw, union, kids };
+      });
+
+      const g = buildIndexes(
+        project({
+          persons: [focal, spouse, ...branches.flatMap((b) => [b.child, b.inLaw, ...b.kids])],
+          unions: [focalUnion, ...branches.map((b) => b.union)],
+          parentChildren: [
+            ...branches.flatMap((b) => [
+              createParentChild({ parentId: focal.id, childId: b.child.id, unionId: focalUnion.id }),
+              createParentChild({ parentId: spouse.id, childId: b.child.id, unionId: focalUnion.id }),
+            ]),
+            ...branches.flatMap((b) =>
+              b.kids.flatMap((kid) => [
+                createParentChild({ parentId: b.child.id, childId: kid.id, unionId: b.union.id }),
+                createParentChild({ parentId: b.inLaw.id, childId: kid.id, unionId: b.union.id }),
+              ]),
+            ),
+          ],
+        }),
+      );
+
+      const row = buildLayout(g, focal.id, { up: 0, down: 2 }).rows.find((r) => r.level === 2).nodes;
+      const gaps = row.slice(1).map((node, i) => node.x - (row[i].x + row[i].width));
+
+      // Between two families, the gap is larger than any gap inside one.
+      const widest = Math.max(...gaps);
+      const rest = gaps.filter((gap) => gap !== widest);
+
+      expect(rest.length).to.be.above(0);
+      expect(widest).to.be.above(Math.max(...rest));
     });
 
     // The sibling comes first in the pair, not the person who married in.

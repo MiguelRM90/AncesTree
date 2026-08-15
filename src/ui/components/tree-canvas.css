@@ -1,34 +1,21 @@
-/**
- * width: max-content is load-bearing, not cosmetic.
- *
- * As a plain block, the host is only as wide as the scroll container while
- * the rows overflow far past it. The SVG layer, sized to the host, then
- * covered a fraction of the tree: lines were squashed into the visible width
- * and simply did not exist once you scrolled sideways.
- */
 :host {
   display: block;
   position: relative;
-  padding: var(--s-8);
-  width: max-content;
-  min-width: 100%;
 }
 
-.rows { position: relative; display: grid; gap: var(--row-gap); justify-items: center; }
-
-.row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  gap: var(--node-gap);
+/**
+ * The canvas is exactly as large as the tree, and every node is placed on it
+ * by the layout engine. Nothing here centres or flows anything: the engine
+ * knows where a couple sits relative to their children, and CSS does not.
+ */
+.canvas {
+  position: relative;
 }
 
-/* Layout spacers: empty, invisible elements that reserve room between
-   branches. NOT to be confused with the model's placeholder people.
-   The wide one marks where one set of siblings ends and the next begins. */
-.spacer { flex: 0 0 auto; }
-.spacer[data-size='couple'] { width: var(--sibling-gap); }
-.spacer[data-size='family'] { width: var(--family-gap); }
+.canvas > * {
+  position: absolute;
+  margin: 0;
+}
 
 .hint {
   position: absolute;

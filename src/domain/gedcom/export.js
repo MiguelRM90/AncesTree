@@ -160,9 +160,16 @@ function writeIndividual(out, person, { xref, families, media }) {
   // A placeholder is emitted without a NAME, which is the usual convention for
   // "someone was here and we do not know who".
   if (!person.isPlaceholder || person.firstName || person.lastName) {
-    out.line(1, 'NAME', `${person.firstName} /${person.lastName}/`.trim());
+    // GEDCOM has one surname field, so the two go into it separated by a
+    // space, which is how a Spanish name is written anyway. _SURN2 keeps the
+    // split so our own import can restore it; other applications ignore it and
+    // still read a correct full name.
+    const surnames = [person.lastName, person.secondLastName].filter(Boolean).join(' ');
+
+    out.line(1, 'NAME', `${person.firstName} /${surnames}/`.trim());
     if (person.firstName) out.line(2, 'GIVN', person.firstName);
-    if (person.lastName) out.line(2, 'SURN', person.lastName);
+    if (surnames) out.line(2, 'SURN', surnames);
+    if (person.secondLastName) out.line(2, '_SURN2', person.secondLastName);
   }
 
   for (const alias of person.alsoKnownAs ?? []) {

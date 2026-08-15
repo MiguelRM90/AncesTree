@@ -4,14 +4,14 @@
  * Hybrid rendering: the cards are native HTML with flex/grid, and the lines are
  * drawn in this absolute layer with orthogonal <path> routes.
  *
- * MEASUREMENT RULES, which is where this always breaks:
- *  - paint() is invoked strictly inside a requestAnimationFrame AFTER the cards
- *    have been inserted into the DOM. Measuring earlier returns zeros or stale
- *    values.
- *  - Every getBoundingClientRect() call happens TOGETHER, in one batch, before
- *    any write. Interleaving reads and writes causes layout thrashing.
- *  - Coordinates are relative to the container, not the viewport, so scrolling
- *    does not force a recalculation.
+ * Nothing here measures the DOM. The layout engine assigns every coordinate,
+ * so the boxes arrive already known.
+ *
+ * That is worth stating because it used to be the opposite, and four separate
+ * bugs came out of it: measuring before the browser had laid anything out,
+ * measuring against the wrong ancestor, an SVG narrower than the tree it
+ * covered, and a stale measurement after a scroll. None of those can happen to
+ * a coordinate that was never measured.
  */
 
 import { svg, clear } from '../dom.js';
@@ -41,38 +41,20 @@ export class TreeEdges extends HTMLElement {
 
   /**
    * @param {Array<{id: string, kind: string, fromNodeId: string, toNodeId: string}>} edges
-   * @param {HTMLElement} container  element holding the nodes
+   * @param {Map<string, object>} boxes  node id -> box, from the layout engine
+   * @param {{width: number, height: number}} size
    */
-  paint(edges, container) {
-    // Measured against this layer's own box, not the container's. The two can
-    // differ by the canvas padding, and a systematic offset in every line is
-    // exactly the kind of bug that looks like "the lines are slightly wrong"
-    // without ever pointing at its cause.
-    const bounds = this.getBoundingClientRect();
-
-    // --- Read phase: the whole measurement batch together ------------------
-    const centres = new Map();
-    for (const node of container.querySelectorAll('[data-node-id]')) {
-      const rect = node.getBoundingClientRect();
-      centres.set(node.dataset.nodeId, {
-        nodeId: node.dataset.nodeId,
-        cx: rect.left - bounds.left + rect.width / 2,
-        top: rect.top - bounds.top,
-        bottom: rect.bottom - bounds.top,
-        left: rect.left - bounds.left,
-        right: rect.right - bounds.left,
-      });
-    }
-
-    // --- Write phase -------------------------------------------------------
-    this.#svg.setAttribute('viewBox', `0 0 ${bounds.width} ${bounds.height}`);
+  paint(edges, boxes, size) {
+    this.#svg.setAttribute('viewBox', `0 0 ${size.width} ${size.height}`);
+    this.style.width = `${size.width}px`;
+    this.style.height = `${size.height}px`;
     clear(this.#svg);
 
     for (const edge of edges) {
       if (edge.kind !== 'partner') continue;
 
-      const from = centres.get(edge.fromNodeId);
-      const to = centres.get(edge.toNodeId);
+      const from = boxes.get(edge.fromNodeId);
+      const to = boxes.get(edge.toNodeId);
       if (!from || !to) continue;
 
       this.#svg.append(
@@ -80,7 +62,7 @@ export class TreeEdges extends HTMLElement {
       );
     }
 
-    for (const path of descentPaths(edges, centres)) {
+    for (const path of descentPaths(edges, boxes)) {
       this.#svg.append(
         svg('path', {
           d: path.d,

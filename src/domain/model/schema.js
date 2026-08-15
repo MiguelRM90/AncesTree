@@ -11,8 +11,28 @@
 
 import { SCHEMA_VERSION, Sex, UnionType, ParentType, Certainty, MediaKind } from './factories.js';
 import { parseDate, unknownDate } from '../date/parse.js';
+import { v1ToV2 } from '../migrations/v1-to-v2.js';
 
 const COLLECTIONS = ['persons', 'unions', 'parentChildren', 'media'];
+
+/**
+ * Applied in a chain, oldest first. Each is a pure `(data) => data`, so a file
+ * three versions behind is brought forward one step at a time rather than by a
+ * special case per starting point.
+ */
+const MIGRATIONS = { 1: v1ToV2 };
+
+function migrate(data) {
+  let current = data;
+
+  while (current.schemaVersion < SCHEMA_VERSION) {
+    const step = MIGRATIONS[current.schemaVersion];
+    if (!step) break;
+    current = step(current);
+  }
+
+  return current;
+}
 
 export class SchemaError extends Error {
   constructor(code, detail) {
@@ -63,7 +83,7 @@ export function validateProject(data) {
 
   if (errors.length > 0) return { ok: false, errors };
 
-  return { ok: true, data: normalizeProject(data) };
+  return { ok: true, data: normalizeProject(migrate(data)) };
 }
 
 /**
@@ -73,7 +93,8 @@ export function validateProject(data) {
  */
 export function normalizeProject(data) {
   return {
-    schemaVersion: data.schemaVersion,
+    // Whatever came in, what leaves is the current version.
+    schemaVersion: SCHEMA_VERSION,
     app: data.app ?? { name: 'AncesTree', version: '0.0.0' },
     project: data.project ?? { id: crypto.randomUUID(), title: 'Untitled family' },
     settings: {
@@ -94,6 +115,7 @@ function normalizePerson(p) {
     id: String(p.id),
     firstName: stringOr(p.firstName),
     lastName: stringOr(p.lastName),
+    secondLastName: stringOr(p.secondLastName),
     alsoKnownAs: Array.isArray(p.alsoKnownAs) ? p.alsoKnownAs.map((v) => stringOr(v)) : [],
     sex: enumOr(p.sex, Sex, Sex.UNKNOWN),
     birth: normalizeEvent(p.birth),

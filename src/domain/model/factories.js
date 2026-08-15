@@ -7,7 +7,7 @@
 
 import { unknownDate } from '../date/parse.js';
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 export const APP_VERSION = '0.1.0';
 
 export const Sex = { MALE: 'M', FEMALE: 'F', UNKNOWN: 'U', OTHER: 'X' };
@@ -54,7 +54,17 @@ export function createPerson(overrides = {}) {
   return {
     id: newId(),
     firstName: '',
+    /**
+     * Two surnames, kept apart on purpose.
+     *
+     * In Spain a person carries their father's first surname and their
+     * mother's first surname, and which is which is what lets a line be
+     * traced at all. Storing "García Pérez" as one string throws that away:
+     * it becomes impossible to tell a compound surname from two, or to know
+     * which one a child inherits.
+     */
     lastName: '',
+    secondLastName: '',
     alsoKnownAs: [],
     sex: Sex.UNKNOWN,
     birth: null,

@@ -1,14 +1,26 @@
 /**
- * Layout engine, phases 0 to 3 (architecture.md, layout section).
+ * Layout engine (architecture.md, layout section).
  *
- * NO DOM. It produces a description of rows, nodes and edges; painting it is
+ * NO DOM. It produces positioned nodes and the edges between them; painting is
  * the job of ui/components/tree-canvas.js. That separation is what allows the
  * layout to be tested without a browser.
  *
  *   Phase 0  Prune around the focal person -> generations.js
  *   Phase 1  Level assignment              -> generations.js
  *   Phase 2  Synthetic union nodes         -> here
- *   Phase 3  Ordering and spacers          -> here
+ *   Phase 3  Ordering                      -> here
+ *   Phase 4  Positioning                   -> here
+ *
+ * Phase 4 is the reason this file assigns coordinates at all.
+ *
+ * Leaving placement to CSS meant every row was centred on its own, with no
+ * relationship between where a couple sat and where their children sat. A
+ * couple could end up at one end of the tree and their children spread across
+ * the other, and the bar joining them ran the width of the screen. No amount
+ * of ordering fixes that, because ordering cannot move a row sideways.
+ *
+ * The rule here is the one every genealogy program uses: a couple is centred
+ * over the block of their children.
  */
 
 import { assignGenerations, groupByLevel } from '../graph/generations.js';
@@ -20,15 +32,17 @@ import {
   parentLinksOf,
   childLinksOf,
 } from '../graph/queries.js';
+import { LAYOUT } from '../../config/layout.js';
 
-export const NodeType = { PERSON: 'person', UNION: 'union', SPACER: 'spacer' };
+export const NodeType = { PERSON: 'person', UNION: 'union' };
 
 /**
  * @typedef {Object} LayoutNode
- * @property {string} type  'person' | 'union' | 'spacer'
- * @property {string} id    node id, unique within the layout
- * @property {string} [entityId]
+ * @property {'person'|'union'} type
+ * @property {string} id        node id, unique within the layout
+ * @property {string} entityId
  * @property {number} level
+ * @property {number} x, y, width, height   in pixels, from the top left
  *
  * @typedef {Object} LayoutEdge
  * @property {string} id
@@ -38,33 +52,33 @@ export const NodeType = { PERSON: 'person', UNION: 'union', SPACER: 'spacer' };
  */
 
 /**
- * @returns {{rows: Array<{level: number, nodes: LayoutNode[]}>, edges: LayoutEdge[], levels: Map<string, number>}}
+ * @returns {{nodes: LayoutNode[], rows: Array<{level: number, nodes: LayoutNode[]}>,
+ *            edges: LayoutEdge[], width: number, height: number, levels: Map<string, number>}}
  */
-export function buildLayout(g, focalId, { up = 4, down = 4 } = {}) {
+export function buildLayout(g, focalId, { up = 4, down = 4, metrics = LAYOUT } = {}) {
   const levels = assignGenerations(g, focalId, { up, down });
-  if (levels.size === 0) return { rows: [], edges: [], levels };
+  const empty = { nodes: [], rows: [], edges: [], width: 0, height: 0, levels };
+  if (levels.size === 0) return empty;
 
-  const grouped = groupByLevel(levels);
-  const visible = new Set(levels.keys());
-
-  // Phase 2: unions do not connect the cards to each other. Each couple gets an
-  // intermediate node, and a single vertical line descends from it towards the
-  // children. Without it, N children x 2 parents produce 2N crossing lines.
   const blocksByLevel = new Map(
-    grouped.map(([level, ids]) => [level, buildBlocks(g, new Set(ids))]),
+    groupByLevel(levels).map(([level, ids]) => [level, buildBlocks(g, new Set(ids), metrics)]),
   );
 
   const ordered = orderRows(g, blocksByLevel, levels);
+  link(g, ordered);
+  place(ordered, metrics);
 
-  return { ...emit(g, ordered, visible), levels };
+  return { ...emit(g, ordered, new Set(levels.keys()), metrics), levels };
 }
+
+// --- Phase 2: blocks -------------------------------------------------------
 
 /**
  * A block is one couple, or one person with no visible partner. Blocks are the
- * unit that gets ordered, because a couple that drifts apart in a row is a
- * couple whose connecting line crosses everyone in between.
+ * unit that gets ordered and positioned, because a couple that drifts apart in
+ * a row is a couple whose connecting line crosses everyone in between.
  */
-function buildBlocks(g, ids) {
+function buildBlocks(g, ids, metrics) {
   const placed = new Set();
   const blocks = [];
 
@@ -87,44 +101,56 @@ function buildBlocks(g, ids) {
       members.push(partnerId);
     }
 
-    blocks.push({ items, members, birth: person.birth?.date?.earliest ?? null });
+    blocks.push({
+      id: person.id,
+      items,
+      members,
+      birth: person.birth?.date?.earliest ?? null,
+      width: widthOf(items, metrics),
+      below: [],
+      kids: [],
+      parentBlock: null,
+      x: 0,
+    });
   }
 
   return blocks;
 }
 
+const widthOf = (items, metrics) =>
+  items.reduce(
+    (total, item) =>
+      total + (item.type === NodeType.UNION ? metrics.unionSize : metrics.cardWidth),
+    0,
+  ) +
+  (items.length - 1) * metrics.itemGap;
+
+// --- Phase 3: ordering -----------------------------------------------------
+
 /**
- * Phase 3: put each row in an order that keeps families together.
- *
- * Ordering rows by birth date alone looked harmless and was not: the three
- * children of one couple ended up first, sixth and ninth in their row, with
- * other people's spouses in between, so the bar joining them ran straight over
- * three strangers and read as though they were all siblings.
+ * Puts each row in an order that keeps families together.
  *
  * Descendant rows follow the position of their parents; ancestor rows follow
- * the position of their children. Both directions radiate outwards from the
- * focal row, which is what makes a pedigree read correctly.
+ * the position of their children. Both radiate outwards from the focal row,
+ * which is what makes a pedigree read correctly.
  */
 function orderRows(g, blocksByLevel, levels) {
   const position = new Map();
   const result = new Map();
 
-  /** The leading member decides where the block sorts, so birth follows it. */
   const withLead = (block) => ({
     ...block,
+    id: block.members[0],
     birth: g.persons.get(block.members[0])?.birth?.date?.earliest ?? null,
   });
 
   const commit = (level, blocks) => {
     result.set(level, blocks);
-    let index = 0;
-    for (const block of blocks) {
+    blocks.forEach((block, index) => {
       for (const memberId of block.members) position.set(memberId, index);
-      index += 1;
-    }
+    });
   };
 
-  /** Where in the neighbouring row this person's relatives sit. */
   const anchorOfPerson = (personId, linksOf, endOf) => {
     let nearest = Infinity;
     for (const link of linksOf(g, personId)) {
@@ -140,7 +166,7 @@ function orderRows(g, blocksByLevel, levels) {
   /**
    * Within a couple, the one connected to the neighbouring row goes first.
    * Otherwise the married-in spouse sits between their partner and their
-   * partner's siblings, stretching the bar that joins them for no reason.
+   * partner's siblings.
    */
   const orient = (block, rank) => {
     if (block.members.length !== 2) return block;
@@ -151,53 +177,39 @@ function orderRows(g, blocksByLevel, levels) {
     return withLead({ ...block, members: [second, first], items: [...block.items].reverse() });
   };
 
-  /**
-   * `group` records which family a block belongs to — the position of the
-   * relatives it hangs from. Blocks sharing it are siblings, and the renderer
-   * uses it to put real space between one set of children and the next.
-   */
   const sortBy = (blocks, linksOf, endOf) =>
     [...blocks]
       .map((block) => orient(block, (id) => anchorOfPerson(id, linksOf, endOf)))
-      .map((block) => ({ ...block, group: anchorOf(block, linksOf, endOf) }))
-      .sort((a, b) => a.group - b.group || compareBirth(a, b));
+      .sort(
+        (a, b) =>
+          anchorOf(a, linksOf, endOf) - anchorOf(b, linksOf, endOf) || compareBirth(a, b),
+      );
 
   const present = [...blocksByLevel.keys()].sort((a, b) => a - b);
   const lowest = present[0];
   const highest = present[present.length - 1];
 
-  const toParents = [parentLinksOf, (link) => link.parentId];
-  const toChildren = [childLinksOf, (link) => link.childId];
-
   /**
-   * The focal row anchors nothing — it is the row everything else radiates
-   * from — so it cannot be oriented by position: the row above has not been
-   * placed yet. Blood relation is enough here, and needs no positions: whoever
-   * has a parent on screen is the sibling, and the sibling leads the pair.
-   *
-   * Without this the focal person's spouse sat between them and their
-   * brothers and sisters, and the bar joining the siblings had to reach over
-   * her.
+   * The focal row cannot be oriented by position — the row above has not been
+   * placed yet — but blood relation needs no positions: whoever has a parent
+   * on screen is the sibling, and the sibling leads the pair.
    */
   const isBloodRelative = (personId) =>
     parentLinksOf(g, personId).some((link) => levels.has(link.parentId)) ? 0 : 1;
 
   commit(
     0,
-    [...(blocksByLevel.get(0) ?? [])]
-      .map((block) => orient(block, isBloodRelative))
-      .sort(compareBirth)
-      .map((block) => ({ ...block, group: 0 })),
+    [...(blocksByLevel.get(0) ?? [])].map((block) => orient(block, isBloodRelative)).sort(compareBirth),
   );
 
   for (let level = 1; level <= highest; level += 1) {
     const blocks = blocksByLevel.get(level);
-    if (blocks) commit(level, sortBy(blocks, ...toParents));
+    if (blocks) commit(level, sortBy(blocks, parentLinksOf, (link) => link.parentId));
   }
 
   for (let level = -1; level >= lowest; level -= 1) {
     const blocks = blocksByLevel.get(level);
-    if (blocks) commit(level, sortBy(blocks, ...toChildren));
+    if (blocks) commit(level, sortBy(blocks, childLinksOf, (link) => link.childId));
   }
 
   return [...result.entries()].sort((a, b) => a[0] - b[0]);
@@ -210,25 +222,226 @@ function compareBirth(a, b) {
   return a.birth < b.birth ? -1 : 1;
 }
 
-/** Phases 2 and 3 turned into nodes and edges. */
-function emit(g, ordered, visible) {
+// --- Phase 4: positioning --------------------------------------------------
+
+/**
+ * Records, for every block, which blocks on the row below descend from it.
+ *
+ * `kids` is the subset that this block alone owns, used to lay the descendant
+ * side out as a tree. `below` is unfiltered and used going upwards, where a
+ * block can legitimately be shared: one couple has two sets of grandparents,
+ * and both of them sit above it.
+ */
+function link(g, ordered) {
+  const blockOfPerson = new Map();
+  for (const [level, blocks] of ordered) {
+    for (const block of blocks) {
+      for (const memberId of block.members) blockOfPerson.set(memberId, { level, block });
+    }
+  }
+
+  for (const [level, blocks] of ordered) {
+    for (const block of blocks) {
+      for (const memberId of block.members) {
+        for (const link_ of parentLinksOf(g, memberId)) {
+          const above = blockOfPerson.get(link_.parentId);
+          if (!above || above.level !== level - 1) continue;
+
+          if (!above.block.below.includes(block)) above.block.below.push(block);
+          block.parentBlock ??= above.block;
+        }
+      }
+    }
+  }
+
+  // The descendant side is a strict tree: a block hangs off exactly one.
+  for (const [, blocks] of ordered) {
+    for (const block of blocks) {
+      block.kids = block.below.filter((child) => child.parentBlock === block);
+    }
+  }
+}
+
+/**
+ * Assigns x to every block.
+ *
+ * The two halves of the chart need opposite rules, and using one for both was
+ * the mistake that left only one family in seven properly centred:
+ *
+ *  - Downwards, a couple is centred over their children. Each subtree is given
+ *    a band of its own, so this is exact — nothing can collide.
+ *  - Upwards, a couple's ancestors are centred over the couple. One couple has
+ *    two sets of grandparents, so it is the GROUP that gets centred, not each
+ *    block; treating them as ordinary children would have made both want the
+ *    same spot.
+ */
+function place(ordered, metrics) {
+  const byLevel = new Map(ordered);
+  const present = [...byLevel.keys()].sort((a, b) => a - b);
+
+  // --- Downwards, from the focal row ---------------------------------------
+  let cursor = 0;
+  for (const block of byLevel.get(0) ?? []) {
+    positionDown(block, cursor, metrics);
+    cursor += spreadDown(block, metrics) + metrics.siblingGap;
+  }
+
+  // --- Upwards, one row at a time ------------------------------------------
+  for (let level = -1; level >= present[0]; level -= 1) {
+    positionUp(byLevel.get(level) ?? [], metrics);
+  }
+
+  // Everything shifted so the leftmost edge is the padding.
+  const leftmost = Math.min(...ordered.flatMap(([, blocks]) => blocks.map((b) => b.x)));
+  for (const [, blocks] of ordered) {
+    for (const block of blocks) block.x += metrics.padding - leftmost;
+  }
+}
+
+/** Width of the band this block and everything under it needs. */
+function spreadDown(block, metrics) {
+  if (block.spread !== undefined) return block.spread;
+
+  const children = block.kids.reduce(
+    (total, child, index) =>
+      total + spreadDown(child, metrics) + (index > 0 ? metrics.siblingGap : 0),
+    0,
+  );
+
+  block.spread = Math.max(block.width, children);
+  return block.spread;
+}
+
+function positionDown(block, left, metrics) {
+  const spread = spreadDown(block, metrics);
+
+  const children = block.kids.reduce(
+    (total, child, index) =>
+      total + spreadDown(child, metrics) + (index > 0 ? metrics.siblingGap : 0),
+    0,
+  );
+
+  let x = left + (spread - children) / 2;
+  for (const child of block.kids) {
+    positionDown(child, x, metrics);
+    x += spreadDown(child, metrics) + metrics.siblingGap;
+  }
+
+  block.x = centredOver(block, block.kids, left, spread, metrics);
+}
+
+/**
+ * Where a block sits so its stem lands in the middle of the bar below it.
+ *
+ * The target is the span of the children's own CARDS, not of their whole
+ * blocks. A child block also holds that child's spouse, so centring over the
+ * blocks put the parents half a couple — 124 px — to one side of the bar their
+ * line actually drops onto. Close enough to look like a mistake, which it was.
+ *
+ * The result is clamped to the band reserved for this subtree, so pursuing a
+ * tidy stem can never push a family into its neighbour.
+ */
+function centredOver(block, children, left, spread, metrics) {
+  if (children.length === 0) return left + (spread - block.width) / 2;
+
+  const first = children[0];
+  const last = children[children.length - 1];
+  const bar = (first.x + last.x + metrics.cardWidth) / 2;
+
+  return clamp(bar - block.width / 2, left, left + spread - block.width);
+}
+
+const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
+
+/**
+ * Places one row of ancestors over the row below, which is already fixed.
+ *
+ * Blocks sharing a child are laid side by side and the group as a whole is
+ * centred over that child. Groups are then swept left to right so they cannot
+ * overlap.
+ */
+function positionUp(blocks, metrics) {
+  const groups = new Map();
+
+  for (const block of blocks) {
+    // Blocks with nothing below them are their own group and keep their order.
+    const anchor = block.below[0] ?? block;
+    const group = groups.get(anchor);
+    if (group) group.push(block);
+    else groups.set(anchor, [block]);
+  }
+
+  const laid = [...groups.entries()].map(([, members]) => {
+    const width = members.reduce(
+      (total, block, index) => total + block.width + (index > 0 ? metrics.siblingGap : 0),
+      0,
+    );
+
+    // Centred over EVERYTHING below them, not just the first one — a couple
+    // with four children belongs over the middle of the four — and over the
+    // children's own cards rather than their blocks, so the stem lands in the
+    // middle of the bar it descends to.
+    const children = members.flatMap((block) => block.below);
+    const left = Math.min(...children.map((child) => child.x));
+    const right = Math.max(...children.map((child) => child.x + metrics.cardWidth));
+
+    return { members, width, desired: (left + right) / 2 - width / 2 };
+  });
+
+  laid.sort((a, b) => a.desired - b.desired);
+
+  let edge = -Infinity;
+  for (const group of laid) {
+    let x = Math.max(group.desired, edge);
+    for (const block of group.members) {
+      block.x = x;
+      x += block.width + metrics.siblingGap;
+    }
+    edge = x - metrics.siblingGap + metrics.familyGap;
+  }
+
+  // The row is stored in the order it will be drawn.
+  blocks.length = 0;
+  blocks.push(...laid.flatMap((group) => group.members));
+}
+
+// --- Emitting --------------------------------------------------------------
+
+function emit(g, ordered, visible, metrics) {
+  const nodes = [];
   const rows = [];
   const edges = [];
   const drawnUnions = new Set();
 
-  for (const [level, blocks] of ordered) {
-    const nodes = [];
+  const topLevel = ordered[0][0];
 
-    for (const [index, block] of blocks.entries()) {
+  for (const [level, blocks] of ordered) {
+    const y = metrics.padding + (level - topLevel) * (metrics.cardHeight + metrics.rowGap);
+    const rowNodes = [];
+
+    for (const block of blocks) {
+      let x = block.x;
+
       for (const item of block.items) {
-        nodes.push({
+        const isUnion = item.type === NodeType.UNION;
+        const width = isUnion ? metrics.unionSize : metrics.cardWidth;
+        const height = isUnion ? metrics.unionSize : metrics.cardHeight;
+
+        rowNodes.push({
           type: item.type,
-          id: `${item.type === NodeType.UNION ? 'u' : 'p'}:${item.entityId}`,
+          id: `${isUnion ? 'u' : 'p'}:${item.entityId}`,
           entityId: item.entityId,
           level,
+          x,
+          // The dot sits on the centre line of the cards beside it.
+          y: isUnion ? y + (metrics.cardHeight - height) / 2 : y,
+          width,
+          height,
         });
 
-        if (item.type !== NodeType.UNION) continue;
+        x += width + metrics.itemGap;
+
+        if (!isUnion) continue;
 
         const union = g.unions.get(item.entityId);
         drawnUnions.add(union.id);
@@ -242,37 +455,27 @@ function emit(g, ordered, visible) {
           if (visible.has(child.id)) edges.push(edge('descent', `u:${union.id}`, `p:${child.id}`));
         }
       }
-
-      // Separator: an empty, invisible element reserving space. NOT to be
-      // confused with the model's placeholder people — this is purely visual.
-      //
-      // A wide one goes between families and a narrow one between couples of
-      // the same family. With a single uniform gap, one couple's children sat
-      // exactly as far from each other as from the neighbouring family's, so
-      // there was no way to see where one set of siblings ended.
-      const next = blocks[index + 1];
-      if (!next) continue;
-
-      nodes.push({
-        type: NodeType.SPACER,
-        id: `s:${block.members[0]}`,
-        level,
-        size: next.group === block.group ? 'couple' : 'family',
-      });
     }
 
-    rows.push({ level, nodes });
+    rows.push({ level, nodes: rowNodes });
+    nodes.push(...rowNodes);
   }
 
   // A parent whose union is not on screen: the line descends straight from
   // their card instead of from a union node.
-  for (const link of g.parentChildren.values()) {
-    if (!visible.has(link.parentId) || !visible.has(link.childId)) continue;
-    if (link.unionId && drawnUnions.has(link.unionId)) continue;
-    edges.push(edge('descent', `p:${link.parentId}`, `p:${link.childId}`));
+  for (const link_ of g.parentChildren.values()) {
+    if (!visible.has(link_.parentId) || !visible.has(link_.childId)) continue;
+    if (link_.unionId && drawnUnions.has(link_.unionId)) continue;
+    edges.push(edge('descent', `p:${link_.parentId}`, `p:${link_.childId}`));
   }
 
-  return { rows, edges };
+  return {
+    nodes,
+    rows,
+    edges,
+    width: Math.max(...nodes.map((n) => n.x + n.width)) + metrics.padding,
+    height: Math.max(...nodes.map((n) => n.y + n.height)) + metrics.padding,
+  };
 }
 
 const edge = (kind, fromNodeId, toNodeId) => ({

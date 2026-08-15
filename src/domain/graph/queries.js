@@ -130,7 +130,16 @@ const roleRank = (item, personId) =>
 
 export function displayName(person) {
   if (!person) return '';
-  const name = `${person.firstName} ${person.lastName}`.trim();
+
+  const name = [person.firstName, person.lastName, person.secondLastName]
+    .filter((part) => part && part.trim() !== '')
+    .join(' ');
+
   if (name !== '') return name;
   return person.isPlaceholder ? 'Unknown' : 'Unnamed';
 }
+
+/** Both surnames, for the places that care about the family line rather than
+ *  the whole name. */
+export const surnamesOf = (person) =>
+  [person?.lastName, person?.secondLastName].filter((part) => part && part.trim() !== '');

@@ -90,7 +90,8 @@ export const S = {
   editor: {
     title: 'Edit person',
     firstName: 'First name',
-    lastName: 'Last name',
+    lastName: 'First surname',
+    secondLastName: 'Second surname',
     sex: 'Sex',
     birth: 'Born',
     death: 'Died',
@@ -140,7 +141,8 @@ export const S = {
   },
 
   card: {
-    issues: (n) => `${n} ${n === 1 ? 'note' : 'notes'} on this person`,
+    issues: (n) => `${n} ${n === 1 ? 'check' : 'checks'} on this person`,
+    hasNote: 'Has a written note',
   },
 
   search: {

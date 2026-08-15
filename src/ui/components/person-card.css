@@ -81,6 +81,22 @@ person-photo { grid-row: 1 / span 2; --photo-size: 2.5rem; }
   min-height: 1.2em;
 }
 
+/* A person with a written note. Out of the flow, opposite the issue badge, so
+   the two never fight for the same corner. */
+.note {
+  position: absolute;
+  bottom: var(--s-2);
+  right: var(--s-2);
+  width: 0.875rem;
+  height: 0.875rem;
+  color: var(--c-text-muted);
+  pointer-events: auto;
+}
+
+:host([focal]) .note {
+  color: var(--c-accent);
+}
+
 /* Out of the flow: the badge must not change the height of the card. */
 .flag {
   position: absolute;

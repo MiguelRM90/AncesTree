@@ -59,19 +59,11 @@
   --radius-sm: 4px;
   --shadow: 0 1px 2px rgb(31 28 24 / 8%), 0 4px 12px rgb(31 28 24 / 6%);
 
-  /* Tree. Cards are a fixed size so a row never goes ragged and the SVG lines
-     are measured off predictable boxes. */
-  --card-width: 12rem;
-  --card-height: 4.75rem;
+  /* Tree. The sizes and spacings live in src/config/layout.js, because the
+     layout engine computes positions from them and needs the real numbers;
+     the canvas publishes them back here as --card-width, --card-height and
+     --union-size. Only the stroke weight is purely visual. */
   --line-width: 1.75px;
-  --row-gap: 4rem;
-  --node-gap: 1rem;
-
-  /* One set of siblings has to be visibly one set. The gap between families is
-     several times the gap inside a couple, so where a family ends is obvious
-     without reading a single line. */
-  --sibling-gap: 1.5rem;
-  --family-gap: 5rem;
 }
 
 @media (prefers-color-scheme: dark) {

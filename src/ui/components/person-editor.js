@@ -55,6 +55,7 @@ export class PersonEditor extends HTMLElement {
 
     this.#fields.firstName.value = person.firstName;
     this.#fields.lastName.value = person.lastName;
+    this.#fields.secondLastName.value = person.secondLastName ?? '';
     this.#fields.sex.value = person.sex;
     this.#fields.notes.value = person.notes;
 
@@ -83,6 +84,7 @@ export class PersonEditor extends HTMLElement {
 
     this.#fields.firstName = input();
     this.#fields.lastName = input();
+    this.#fields.secondLastName = input();
     this.#fields.sex = select();
     this.#fields.birthDate = document.createElement('date-field');
     this.#fields.deathDate = document.createElement('date-field');
@@ -119,11 +121,13 @@ export class PersonEditor extends HTMLElement {
         children: [
           el('h2', { text: S.editor.title, attrs: { id: 'editor-title' } }),
           this.#fields.placeholderNote,
+          labelled(S.editor.firstName, this.#fields.firstName),
+          // Two surnames, side by side and in the order they are said.
           el('div', {
             class: 'pair',
             children: [
-              labelled(S.editor.firstName, this.#fields.firstName),
               labelled(S.editor.lastName, this.#fields.lastName),
+              labelled(S.editor.secondLastName, this.#fields.secondLastName),
             ],
           }),
           labelled(S.editor.sex, this.#fields.sex),
@@ -284,6 +288,7 @@ export class PersonEditor extends HTMLElement {
       changes: {
         firstName,
         lastName: this.#fields.lastName.value.trim(),
+        secondLastName: this.#fields.secondLastName.value.trim(),
         sex: this.#fields.sex.value,
         birth: eventFrom(this.#fields.birthDate.raw, this.#fields.birthPlace.value),
         death: eventFrom(this.#fields.deathDate.raw, this.#fields.deathPlace.value),

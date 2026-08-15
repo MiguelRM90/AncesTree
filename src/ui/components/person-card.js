@@ -15,7 +15,7 @@
  * SVG lines are measured off these boxes, so uneven heights bend the tree too.
  */
 
-import { el, setChildren, emit } from '../dom.js';
+import { el, svg, setChildren, emit } from '../dom.js';
 import { base, sheet } from '../styles/sheets.js';
 import css from './person-card.css?inline';
 import { S } from '../../config/strings.js';
@@ -123,14 +123,50 @@ export class PersonCard extends HTMLElement {
       this.#photo,
       el('span', { class: 'name', text: name, attrs: { title: name } }),
       el('span', { class: 'dates', text: lifespan }),
+      this.#noteMark(person.notes),
       this.#flag(notes),
     ]);
 
     // aria-label replaces the whole content for a screen reader, so anything
     // meaningful shown visually has to be repeated here — including the notes,
     // which would otherwise be silently dropped.
-    this.#button.setAttribute('aria-label', [name, lifespan, ...notes].filter(Boolean).join('. '));
+    this.#button.setAttribute(
+      'aria-label',
+      [name, lifespan, person.notes && S.card.hasNote, ...notes].filter(Boolean).join('. '),
+    );
     this.#button.setAttribute('aria-selected', String(this.hasAttribute('focal')));
+  }
+
+  /**
+   * A written note on this person.
+   *
+   * Free text is the one field with no other trace on the card — a whole
+   * paragraph of research could sit there completely invisible. The mark says
+   * it exists; hovering shows it; opening the person reads it in full.
+   */
+  #noteMark(note) {
+    if (!note || note.trim() === '') return null;
+
+    const mark = svg('svg', {
+      class: 'note',
+      viewBox: '0 0 16 16',
+      fill: 'currentColor',
+      'aria-hidden': 'true',
+      focusable: 'false',
+    });
+
+    mark.append(
+      svg('path', {
+        d: 'M3 1.5h7.2L14 5.3V14a.5.5 0 0 1-.5.5h-10A.5.5 0 0 1 3 14V2a.5.5 0 0 1 .5-.5Zm6.5 1.2V5.5H12.3ZM5.5 8h5v1.1h-5Zm0 2.6h3.4v1.1H5.5Z',
+      }),
+    );
+
+    // Long research notes are trimmed in the tooltip; the editor has them all.
+    const preview = note.length > 300 ? `${note.slice(0, 300)}…` : note;
+    mark.append(svg('title', {}));
+    mark.lastChild.textContent = `${S.card.hasNote}\n${preview}`;
+
+    return mark;
   }
 
   /**

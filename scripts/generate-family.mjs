@@ -125,7 +125,12 @@ const media = [];
  *   died at five and then had descendants — genealogically impossible data
  *   that the validator was right to reject.
  */
-function makePerson(generation, sex, surname, { minLifespan = 0 } = {}) {
+/**
+ * @param {{first: string, second: string}} [surnames]  Spanish naming: the
+ *   father's first surname followed by the mother's first surname. Getting
+ *   this right is what makes the generated data look like a real archive.
+ */
+function makePerson(generation, sex, surnames, { minLifespan = 0 } = {}) {
   const birthYear = FIRST_BIRTH_YEAR + generation * GENERATION_YEARS + between(-4, 4);
 
   // Historical infant mortality, but only for people who never became parents.
@@ -137,7 +142,8 @@ function makePerson(generation, sex, surname, { minLifespan = 0 } = {}) {
   const person = createPerson({
     id: uuid(),
     firstName: sex === Sex.MALE ? pick(MALE_NAMES) : pick(FEMALE_NAMES),
-    lastName: surname ?? pick(SURNAMES),
+    lastName: surnames?.first ?? pick(SURNAMES),
+    secondLastName: surnames?.second ?? pick(SURNAMES),
     sex,
     birth: event(birthYear),
     death: stillLiving ? null : event(deathYear),
@@ -212,8 +218,7 @@ function build(founderCouples) {
   let couples = [];
 
   for (let i = 0; i < founderCouples; i += 1) {
-    const surname = pick(SURNAMES);
-    const husband = makePerson(0, Sex.MALE, surname, { minLifespan: 45 });
+    const husband = makePerson(0, Sex.MALE, undefined, { minLifespan: 45 });
     const wife = makePerson(0, Sex.FEMALE, undefined, { minLifespan: 45 });
     couples.push({ union: marry(husband, wife, FIRST_BIRTH_YEAR + 24), a: husband, b: wife });
   }
@@ -241,9 +246,14 @@ function build(founderCouples) {
         // have a family determines how long they have to live.
         const willMarry = chance(0.78) && persons.length + 1 < TARGET;
 
-        const child = makePerson(generation, sex, sex === Sex.MALE ? couple.a.lastName : undefined, {
-          minLifespan: willMarry ? 45 : 0,
-        });
+        // Father's first surname, then mother's first surname — the rule, and
+        // the reason the two are stored separately.
+        const child = makePerson(
+          generation,
+          sex,
+          { first: couple.a.lastName, second: couple.b.lastName },
+          { minLifespan: willMarry ? 45 : 0 },
+        );
         descend(couple.a, couple.b, child, couple.union);
 
         if (willMarry) marrying.push({ person: child, family: couple.union.id });

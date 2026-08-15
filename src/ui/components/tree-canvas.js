@@ -1,24 +1,23 @@
 /**
- * Layout phases 4 and 5: emit the LayoutTree as DOM and draw the lines
- * (architecture.md, layout section).
+ * Paints the layout.
  *
- * Coordinates are NOT computed by hand: CSS places the boxes and the engine
- * only decides order and grouping. That is what keeps the tree accessible and
- * clickable with ordinary events.
+ * The engine decides every position; this file only places the elements where
+ * it says and draws the lines between them. Because the coordinates are known
+ * up front, nothing here measures the DOM — which removed the whole class of
+ * bugs that came from measuring at the wrong moment, or against the wrong box,
+ * or before the browser had laid anything out.
  *
  * Accessibility: role="tree" with a roving tabindex, so the whole tree is a
- * single tab stop and the arrow keys move within it. The row wrappers are
- * role="none" because a tree may only contain treeitems and groups — an
- * unmarked div in between breaks the parent/child relationship.
+ * single tab stop and the arrow keys move within it.
  */
 
-import { el, clear, debounce } from '../dom.js';
+import { el, clear } from '../dom.js';
 import { base, sheet } from '../styles/sheets.js';
 import css from './tree-canvas.css?inline';
 import { S } from '../../config/strings.js';
+import { LAYOUT, layoutProperties } from '../../config/layout.js';
 import { buildLayout, NodeType } from '../../domain/layout/engine.js';
 import { portraitOf, displayName } from '../../domain/graph/queries.js';
-import { RESIZE_DEBOUNCE_MS } from '../../config/limits.js';
 import './person-card.js';
 import './union-node.js';
 import './tree-edges.js';
@@ -30,11 +29,9 @@ export class TreeCanvas extends HTMLElement {
   #focalId = null;
   #issuesFor = () => [];
   #resolvePhoto = null;
-  #rows;
+  #canvas;
   #edgesLayer;
-  #onResize;
-  #lastEdges = [];
-  /** Cards laid out by row, for keyboard navigation. */
+  /** Focusable nodes by row, for keyboard navigation. */
   #grid = [];
   #cursor = { row: 0, column: 0 };
   #lit = null;
@@ -47,86 +44,36 @@ export class TreeCanvas extends HTMLElement {
 
     const hint = el('p', { class: 'hint', text: S.a11y.treeHint, attrs: { id: 'tree-hint' } });
 
-    this.#rows = el('div', {
-      class: 'rows',
+    this.#canvas = el('div', {
+      class: 'canvas',
       attrs: { role: 'tree', 'aria-label': S.a11y.tree, 'aria-describedby': 'tree-hint' },
     });
 
     this.#edgesLayer = document.createElement('tree-edges');
-    root.append(hint, this.#edgesLayer, this.#rows);
-
-    this.#onResize = debounce(() => this.#paintEdges(), RESIZE_DEBOUNCE_MS);
+    root.append(hint, this.#canvas);
   }
 
   connectedCallback() {
-    window.addEventListener('resize', this.#onResize);
-    this.#rows.addEventListener('keydown', this.#onKeyDown);
-    this.#rows.addEventListener('pointerover', this.#onPointOver);
-    this.#rows.addEventListener('pointerleave', this.#onPointOut);
-    this.#rows.addEventListener('focusin', this.#onPointOver);
-    this.#rows.addEventListener('union:pin', this.#onPin);
+    // The engine owns the sizes; the components read them back from here, so
+    // there is one definition rather than two that drift apart.
+    for (const [property, value] of Object.entries(layoutProperties())) {
+      this.style.setProperty(property, value);
+    }
+
+    // No resize listener: positions no longer depend on the viewport at all.
+    this.#canvas.addEventListener('keydown', this.#onKeyDown);
+    this.#canvas.addEventListener('pointerover', this.#onPointOver);
+    this.#canvas.addEventListener('pointerleave', this.#onPointOut);
+    this.#canvas.addEventListener('focusin', this.#onPointOver);
+    this.#canvas.addEventListener('union:pin', this.#onPin);
   }
 
   disconnectedCallback() {
-    window.removeEventListener('resize', this.#onResize);
-    this.#rows.removeEventListener('keydown', this.#onKeyDown);
-    this.#rows.removeEventListener('pointerover', this.#onPointOver);
-    this.#rows.removeEventListener('pointerleave', this.#onPointOut);
-    this.#rows.removeEventListener('focusin', this.#onPointOver);
-    this.#rows.removeEventListener('union:pin', this.#onPin);
-  }
-
-  /**
-   * Pointing at a person lights up the bar they hang from and outlines their
-   * parents. Working out whose child someone is by following a line across a
-   * crowded row is real effort; pointing at them should just answer it.
-   */
-  #onPointOver = (event) => {
-    if (this.#pinned) return; // a pin outranks whatever the pointer is over
-    const card = event.target.closest('person-card');
-    this.#light(card?.dataset.nodeId ?? null);
-  };
-
-  #onPointOut = () => {
-    if (!this.#pinned) this.#light(null);
-  };
-
-  /** Clicking a union node keeps its family lit; clicking it again lets go. */
-  #onPin = (event) => {
-    const { nodeId } = event.detail;
-    this.#pinned = this.#pinned === nodeId ? null : nodeId;
-
-    this.#light(this.#pinned, { force: true });
-    this.#syncPins();
-  };
-
-  #syncPins() {
-    for (const node of this.#rows.querySelectorAll('union-node')) {
-      node.pinned = node.dataset.nodeId === this.#pinned;
-    }
-  }
-
-  #light(nodeId, { force = false } = {}) {
-    if (nodeId === this.#lit && !force) return;
-    this.#lit = nodeId;
-
-    const source = this.#edgesLayer.highlight(nodeId, { pinned: this.#pinned !== null });
-    const related = new Set(source.flatMap((id) => this.#cardsOf(id)));
-
-    for (const row of this.#grid) {
-      for (const node of row) {
-        if (node.tagName === 'PERSON-CARD') {
-          node.toggleAttribute('related', related.has(node.dataset.nodeId));
-        }
-      }
-    }
-  }
-
-  /** A union node stands for two people; a bare card stands for itself. */
-  #cardsOf(nodeId) {
-    if (!nodeId.startsWith('u:')) return [nodeId];
-    const union = this.#graph.unions.get(nodeId.slice(2));
-    return union ? [`p:${union.partner1Id}`, `p:${union.partner2Id}`] : [];
+    this.#canvas.removeEventListener('keydown', this.#onKeyDown);
+    this.#canvas.removeEventListener('pointerover', this.#onPointOver);
+    this.#canvas.removeEventListener('pointerleave', this.#onPointOut);
+    this.#canvas.removeEventListener('focusin', this.#onPointOver);
+    this.#canvas.removeEventListener('union:pin', this.#onPin);
   }
 
   /**
@@ -147,82 +94,48 @@ export class TreeCanvas extends HTMLElement {
     // new centre; if the change came from a dialog, it is left alone.
     const hadFocus = this.shadowRoot.activeElement !== null;
 
-    clear(this.#rows);
+    clear(this.#canvas);
     this.#grid = [];
-
-    // The node ids are rebuilt from scratch, so a pin on the old tree means
-    // nothing on the new one.
     this.#pinned = null;
     this.#lit = null;
 
     if (!this.#graph || !this.#focalId) return;
 
-    const { rows, edges } = buildLayout(this.#graph, this.#focalId, {
+    const layout = buildLayout(this.#graph, this.#focalId, {
       up: this.#graph.settings.maxGenerationsUp,
       down: this.#graph.settings.maxGenerationsDown,
+      metrics: LAYOUT,
     });
 
-    // ARIA levels are 1-based and must not depend on how far the window was
-    // pruned, so they are counted from the topmost row actually rendered.
-    const topLevel = rows.length > 0 ? rows[0].level : 0;
+    this.#canvas.style.width = `${layout.width}px`;
+    this.#canvas.style.height = `${layout.height}px`;
 
-    for (const row of rows) {
-      const rowEl = el('div', { class: 'row', attrs: { role: 'none' } });
+    const topLevel = layout.rows.length > 0 ? layout.rows[0].level : 0;
+
+    for (const row of layout.rows) {
       const focusable = [];
 
       for (const node of row.nodes) {
-        const element = this.#nodeElement(node, row.level - topLevel + 1);
-        // Union nodes are treeitems too: they can be pinned, so the arrow keys
-        // have to be able to reach them.
-        if (node.type !== NodeType.SPACER) focusable.push(element);
-        rowEl.append(element);
+        const element = this.#nodeElement(node, node.level - topLevel + 1);
+        element.style.left = `${node.x}px`;
+        element.style.top = `${node.y}px`;
+        focusable.push(element);
+        this.#canvas.append(element);
       }
 
       this.#grid.push(focusable);
-      this.#rows.append(rowEl);
     }
 
+    // The edge layer covers the whole canvas and is drawn from the same
+    // coordinates the nodes were placed with. No measuring, no timing.
+    this.#canvas.append(this.#edgesLayer);
+    this.#edgesLayer.paint(layout.edges, boxesOf(layout), layout);
+
     this.#placeCursorOnFocal();
-
-    // Drawing happens strictly inside a rAF after insertion: measuring earlier
-    // returns zeros.
-    requestAnimationFrame(() => {
-      this.#paintEdges(edges);
-      this.#revealFocal(hadFocus);
-    });
-  }
-
-  /**
-   * Brings the centred person into view.
-   *
-   * Re-rooting the tree rebuilds the entire layout, so without this the person
-   * just clicked can land anywhere — often off-screen. The view then looks like
-   * it changed at random, which is precisely how it felt.
-   */
-  #revealFocal(restoreFocus = false) {
-    const card = this.#grid[this.#cursor.row]?.[this.#cursor.column];
-    if (!card) return;
-
-    // Instant, not smooth: animating a scroll across a tree this wide is both
-    // slow and disorienting.
-    card.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
-    if (restoreFocus) card.focus({ preventScroll: true });
-  }
-
-  #paintEdges(edges) {
-    if (edges) this.#lastEdges = edges;
-    this.#edgesLayer.paint(this.#lastEdges, this.#rows);
+    this.#revealFocal(hadFocus);
   }
 
   #nodeElement(node, level) {
-    if (node.type === NodeType.SPACER) {
-      return el('div', {
-        class: 'spacer',
-        dataset: { size: node.size ?? 'couple' },
-        attrs: { 'aria-hidden': 'true' },
-      });
-    }
-
     if (node.type === NodeType.UNION) {
       const union = this.#graph.unions.get(node.entityId);
       const unionEl = document.createElement('union-node');
@@ -250,6 +163,56 @@ export class TreeCanvas extends HTMLElement {
     return card;
   }
 
+  // --- Highlighting --------------------------------------------------------
+
+  #onPointOver = (event) => {
+    if (this.#pinned) return; // a pin outranks whatever the pointer is over
+    const card = event.target.closest('person-card');
+    this.#light(card?.dataset.nodeId ?? null);
+  };
+
+  #onPointOut = () => {
+    if (!this.#pinned) this.#light(null);
+  };
+
+  /** Clicking a union node keeps its family lit; clicking it again lets go. */
+  #onPin = (event) => {
+    const { nodeId } = event.detail;
+    this.#pinned = this.#pinned === nodeId ? null : nodeId;
+
+    this.#light(this.#pinned, { force: true });
+    this.#syncPins();
+  };
+
+  #syncPins() {
+    for (const node of this.#canvas.querySelectorAll('union-node')) {
+      node.pinned = node.dataset.nodeId === this.#pinned;
+    }
+  }
+
+  #light(nodeId, { force = false } = {}) {
+    if (nodeId === this.#lit && !force) return;
+    this.#lit = nodeId;
+
+    const source = this.#edgesLayer.highlight(nodeId, { pinned: this.#pinned !== null });
+    const related = new Set(source.flatMap((id) => this.#cardsOf(id)));
+
+    for (const row of this.#grid) {
+      for (const node of row) {
+        if (node.tagName === 'PERSON-CARD') {
+          node.toggleAttribute('related', related.has(node.dataset.nodeId));
+        }
+      }
+    }
+  }
+
+  /** A union node stands for two people; a bare card stands for itself. */
+  #cardsOf(nodeId) {
+    if (!nodeId.startsWith('u:')) return [nodeId];
+    const union = this.#graph.unions.get(nodeId.slice(2));
+    return union ? [`p:${union.partner1Id}`, `p:${union.partner2Id}`] : [];
+  }
+
   // --- Keyboard navigation -------------------------------------------------
 
   /** The tab stop starts on the focal person, which is where attention is. */
@@ -269,6 +232,20 @@ export class TreeCanvas extends HTMLElement {
     }
   }
 
+  /**
+   * Brings the centred person into view.
+   *
+   * Re-rooting rebuilds the entire layout, so without this the person just
+   * clicked can land anywhere — often off-screen.
+   */
+  #revealFocal(restoreFocus = false) {
+    const card = this.#grid[this.#cursor.row]?.[this.#cursor.column];
+    if (!card) return;
+
+    card.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+    if (restoreFocus) card.focus({ preventScroll: true });
+  }
+
   #onKeyDown = (event) => {
     if (event.key === 'Escape' && this.#pinned) {
       event.preventDefault();
@@ -279,8 +256,8 @@ export class TreeCanvas extends HTMLElement {
     }
 
     const moves = {
-      ArrowRight: () => this.#step(0, 1),
-      ArrowLeft: () => this.#step(0, -1),
+      ArrowRight: () => this.#step(1),
+      ArrowLeft: () => this.#step(-1),
       ArrowDown: () => this.#stepRow(1),
       ArrowUp: () => this.#stepRow(-1),
       Home: () => this.#moveTo(this.#cursor.row, 0),
@@ -294,14 +271,13 @@ export class TreeCanvas extends HTMLElement {
     move();
   };
 
-  #step(rowDelta, columnDelta) {
-    this.#moveTo(this.#cursor.row + rowDelta, this.#cursor.column + columnDelta);
+  #step(delta) {
+    this.#moveTo(this.#cursor.row, this.#cursor.column + delta);
   }
 
   /**
    * Moving between generations keeps the horizontal position: it lands on the
-   * card nearest to the current one, which is almost always the relative the
-   * user meant.
+   * node nearest the current one, which is almost always the relative meant.
    */
   #stepRow(delta) {
     const row = this.#cursor.row + delta;
@@ -315,8 +291,8 @@ export class TreeCanvas extends HTMLElement {
     let best = 0;
     let bestDistance = Infinity;
 
-    for (const [index, card] of target.entries()) {
-      const distance = Math.abs(centreOf(card) - x);
+    for (const [index, node] of target.entries()) {
+      const distance = Math.abs(centreOf(node) - x);
       if (distance < bestDistance) {
         bestDistance = distance;
         best = index;
@@ -327,23 +303,37 @@ export class TreeCanvas extends HTMLElement {
   }
 
   #moveTo(row, column) {
-    const cards = this.#grid[row];
-    if (!cards || cards.length === 0) return;
+    const nodes = this.#grid[row];
+    if (!nodes || nodes.length === 0) return;
 
-    const clamped = Math.max(0, Math.min(cards.length - 1, column));
+    const clamped = Math.max(0, Math.min(nodes.length - 1, column));
     const previous = this.#grid[this.#cursor.row]?.[this.#cursor.column];
 
     if (previous) previous.focusable = false;
 
     this.#cursor = { row, column: clamped };
-    cards[clamped].focusable = true;
-    cards[clamped].focus();
+    nodes[clamped].focusable = true;
+    nodes[clamped].focus();
   }
 }
 
-const centreOf = (element) => {
-  const rect = element.getBoundingClientRect();
-  return rect.left + rect.width / 2;
-};
+/** The boxes the line geometry works from, straight out of the layout. */
+function boxesOf(layout) {
+  return new Map(
+    layout.nodes.map((node) => [
+      node.id,
+      {
+        nodeId: node.id,
+        cx: node.x + node.width / 2,
+        top: node.y,
+        bottom: node.y + node.height,
+        left: node.x,
+        right: node.x + node.width,
+      },
+    ]),
+  );
+}
+
+const centreOf = (element) => element.offsetLeft + element.offsetWidth / 2;
 
 customElements.define('tree-canvas', TreeCanvas);
