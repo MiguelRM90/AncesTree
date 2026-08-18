@@ -337,4 +337,94 @@ describe('layout', () => {
       ]);
     });
   });
+
+  /**
+   * Someone who was with two people in turn.
+   *
+   * Laid out as [T1][·][T2][·][T3] the second dot lands between T2 and T3 and
+   * says they are the couple, which they are not. T1 belongs in the middle.
+   */
+  describe('a person with two partners', () => {
+    const remarried = () => {
+      const t1 = person('T1', { sex: Sex.FEMALE, born: '1900' });
+      const t2 = person('T2', { sex: Sex.MALE, born: '1898' });
+      const t3 = person('T3', { sex: Sex.MALE, born: '1901' });
+
+      const first = createUnion({ partner1Id: t1.id, partner2Id: t2.id });
+      const second = createUnion({ partner1Id: t1.id, partner2Id: t3.id });
+
+      return {
+        t1, t2, t3, first, second,
+        data: project({
+          persons: [t1, t2, t3],
+          unions: [first, second],
+          settings: { focalPersonId: t1.id, maxGenerationsUp: 2, maxGenerationsDown: 2 },
+        }),
+      };
+    };
+
+    const nodesAt = (layout, level) =>
+      layout.rows.find((row) => row.level === level).nodes;
+
+    it('puts the shared person between the two partners', () => {
+      const { t1, t2, t3, data } = remarried();
+      const g = buildIndexes(data);
+      const order = nodesAt(buildLayout(g, t1.id), 0)
+        .filter((node) => node.type === NodeType.PERSON)
+        .map((node) => node.entityId);
+
+      expect(order).to.eql([t2.id, t1.id, t3.id]);
+    });
+
+    it('leaves each union dot between the two people it actually joins', () => {
+      const { t1, t2, t3, first, second, data } = remarried();
+      const g = buildIndexes(data);
+      const nodes = nodesAt(buildLayout(g, t1.id), 0);
+
+      const spanOf = (id) => {
+        const node = nodes.find((n) => n.entityId === id);
+        return [node.x, node.x + node.width];
+      };
+
+      const [, t2Right] = spanOf(t2.id);
+      const [t1Left, t1Right] = spanOf(t1.id);
+      const [t3Left] = spanOf(t3.id);
+      const [firstLeft, firstRight] = spanOf(first.id);
+      const [secondLeft, secondRight] = spanOf(second.id);
+
+      // Each dot sits in the gap between its own two partners, and nothing
+      // else lies in that gap.
+      expect(firstLeft).to.be.at.least(t2Right);
+      expect(firstRight).to.be.at.most(t1Left);
+      expect(secondLeft).to.be.at.least(t1Right);
+      expect(secondRight).to.be.at.most(t3Left);
+    });
+
+    it('still draws two partner edges per union, to the right people', () => {
+      const { t1, t2, t3, first, second, data } = remarried();
+      const g = buildIndexes(data);
+      const { edges } = buildLayout(g, t1.id);
+
+      const partnersOfUnion = (union) =>
+        edges
+          .filter((e) => e.kind === 'partner' && e.toNodeId === `u:${union.id}`)
+          .map((e) => e.fromNodeId)
+          .sort();
+
+      expect(partnersOfUnion(first)).to.eql([`p:${t1.id}`, `p:${t2.id}`].sort());
+      expect(partnersOfUnion(second)).to.eql([`p:${t1.id}`, `p:${t3.id}`].sort());
+    });
+
+    /** One partner keeps the old arrangement exactly: person first, then dot. */
+    it('does not move anything when there is only one partner', () => {
+      const { father, mother, data } = minimalFamily();
+      const g = buildIndexes(data);
+      const order = buildLayout(g, father.id, { up: 0, down: 0 })
+        .rows.find((row) => row.level === 0)
+        .nodes.filter((node) => node.type === NodeType.PERSON)
+        .map((node) => node.entityId);
+
+      expect(order).to.eql([father.id, mother.id]);
+    });
+  });
 });

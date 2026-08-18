@@ -20,6 +20,7 @@ import './import-dialog.js';
 import './app-notice.js';
 import './person-search.js';
 import './review-panel.js';
+import './relation-editor.js';
 import './menu-button.js';
 
 const styles = sheet(css);
@@ -65,6 +66,7 @@ export class AppRoot extends HTMLElement {
   #editor = null;
   #importer = null;
   #review = null;
+  #relations = null;
   #pendingImport = null;
   #message = '';
 
@@ -109,6 +111,7 @@ export class AppRoot extends HTMLElement {
     this.addEventListener('import:new', this.#onImportNew);
     this.addEventListener('person:reveal', this.#onPersonReveal);
     this.addEventListener('menu:open', this.#onMenuOpen);
+    this.addEventListener('relation:change', this.#onRelationChange);
     this.addEventListener('photos:add', this.#onPhotosAdd);
     this.addEventListener('photo:portrait', this.#onPhotoPortrait);
     this.addEventListener('photo:remove', this.#onPhotoRemove);
@@ -131,6 +134,7 @@ export class AppRoot extends HTMLElement {
     this.removeEventListener('import:new', this.#onImportNew);
     this.removeEventListener('person:reveal', this.#onPersonReveal);
     this.removeEventListener('menu:open', this.#onMenuOpen);
+    this.removeEventListener('relation:change', this.#onRelationChange);
     this.removeEventListener('photos:add', this.#onPhotosAdd);
     this.removeEventListener('photo:portrait', this.#onPhotoPortrait);
     this.removeEventListener('photo:remove', this.#onPhotoRemove);
@@ -157,6 +161,7 @@ export class AppRoot extends HTMLElement {
       children: [
         make('back', S.toolbar.back, () => store.goBack()),
         make('edit', S.toolbar.edit, () => this.#editFocal()),
+        make('relations', S.relations.open, () => this.#editRelations()),
 
         // Two families of actions behind one label each. Eleven buttons in a
         // row was a wall; this is the same reach, one click deeper.
@@ -408,6 +413,38 @@ export class AppRoot extends HTMLElement {
       graph: store.graph,
     });
   }
+
+  /**
+   * Who this person's parents were, and who they were with.
+   *
+   * The graph is passed as a getter, not a snapshot: every change inside the
+   * dialog rewrites it, and a copy taken on open would be one edit stale from
+   * the first click onwards.
+   */
+  #editRelations() {
+    if (store.focalPersonId === null) return;
+
+    if (!this.#relations) {
+      this.#relations = document.createElement('relation-editor');
+      this.shadowRoot.append(this.#relations);
+    }
+
+    this.#relations.open(store.focalPersonId, () => store.graph);
+  }
+
+  /**
+   * The relationship editor names an action; the store performs it.
+   *
+   * Every one of them can be refused — a loop in the lineage, a third
+   * biological parent — and a refusal has to be said out loud, because the
+   * dialog has already repainted the control back to what the data says and
+   * would otherwise look as though nothing had happened.
+   */
+  #onRelationChange = (event) => {
+    const { action, args } = event.detail;
+    const result = actions[action]?.(...args);
+    if (result && result.ok === false && result.errors) this.#reportBlocked(result.errors);
+  };
 
   /**
    * Jumping to someone named in a note. Closes the editor first: the point of

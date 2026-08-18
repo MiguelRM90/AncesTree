@@ -1,0 +1,363 @@
+import { expect } from '@open-wc/testing';
+import { buildIndexes } from '../src/domain/graph/indexes.js';
+import { descendantIds, parentsOf, parentLinksOf } from '../src/domain/graph/queries.js';
+import { validateBlocking } from '../src/domain/validation/engine.js';
+import {
+  createPerson,
+  createUnion,
+  createParentChild,
+  ParentType,
+  UnionType,
+} from '../src/domain/model/factories.js';
+import { parseDate } from '../src/domain/date/parse.js';
+import { store } from '../src/store/store.js';
+import * as actions from '../src/store/actions.js';
+import { createBrowserFolder, removeBrowserFolder } from '../src/storage/opfs.js';
+import { person, project, minimalFamily } from './fixtures/families.js';
+
+/**
+ * The relationship edits, tested as the pure project-to-project functions they
+ * are underneath. The store adds undo and the refusal of anything blocking;
+ * what matters here is that the shapes coming out are the ones intended.
+ */
+
+// --- The transforms, mirroring store/actions.js -----------------------------
+
+const updateUnion = (p, unionId, changes) => ({
+  ...p,
+  unions: p.unions.map((u) => (u.id === unionId ? { ...u, ...changes } : u)),
+});
+
+const updateParentLink = (p, linkId, changes) => ({
+  ...p,
+  parentChildren: p.parentChildren.map((l) => (l.id === linkId ? { ...l, ...changes } : l)),
+});
+
+function setChildUnion(p, childId, union) {
+  const partnerIds = union ? [union.partner1Id, union.partner2Id] : [];
+  const linked = new Set(
+    p.parentChildren.filter((l) => l.childId === childId).map((l) => l.parentId),
+  );
+
+  const updated = p.parentChildren.map((l) => {
+    if (l.childId !== childId) return l;
+    if (!union) return l.unionId === null ? l : { ...l, unionId: null };
+    return partnerIds.includes(l.parentId) ? { ...l, unionId: union.id } : l;
+  });
+
+  const added = partnerIds
+    .filter((id) => !linked.has(id))
+    .map((parentId) => createParentChild({ parentId, childId, unionId: union.id }));
+
+  return { ...p, parentChildren: [...updated, ...added] };
+}
+
+// --- Fixtures ---------------------------------------------------------------
+
+/**
+ * THE REPORTED CASE: a child, one parent added to them, and then a partner
+ * added to that parent. Nothing yet says the partner is the other parent.
+ */
+function childWithOneParentAndAStepIn() {
+  const child = person('Tn', { born: '1950' });
+  const father = person('Tnx', { born: '1920' });
+  const mother = person('Tny', { born: '1922' });
+
+  const union = createUnion({ partner1Id: father.id, partner2Id: mother.id });
+  const link = createParentChild({ parentId: father.id, childId: child.id });
+
+  return {
+    child, father, mother, union, link,
+    data: project({
+      persons: [child, father, mother],
+      unions: [union],
+      parentChildren: [link],
+      settings: { focalPersonId: child.id, maxGenerationsUp: 3, maxGenerationsDown: 3 },
+    }),
+  };
+}
+
+describe('descendantIds', () => {
+  it('is the person plus everyone under them', () => {
+    const { father, mother, child, data } = minimalFamily();
+    const g = buildIndexes(data);
+
+    expect([...descendantIds(g, father.id)]).to.have.members([father.id, child.id]);
+    expect([...descendantIds(g, child.id)]).to.eql([child.id]);
+    expect(descendantIds(g, mother.id).has(child.id)).to.equal(true);
+  });
+
+  it('walks a branch that rejoins only once', () => {
+    // Cousins who married: their child is reachable by two paths from the
+    // shared ancestor, and must still be visited a single time.
+    const root = person('Root', { born: '1900' });
+    const a = person('A', { born: '1925' });
+    const b = person('B', { born: '1927' });
+    const grandchild = person('C', { born: '1950' });
+
+    const data = project({
+      persons: [root, a, b, grandchild],
+      parentChildren: [
+        createParentChild({ parentId: root.id, childId: a.id }),
+        createParentChild({ parentId: root.id, childId: b.id }),
+        createParentChild({ parentId: a.id, childId: grandchild.id }),
+        createParentChild({ parentId: b.id, childId: grandchild.id }),
+      ],
+    });
+
+    const found = descendantIds(buildIndexes(data), root.id);
+    expect([...found]).to.have.members([root.id, a.id, b.id, grandchild.id]);
+    expect(found.size).to.equal(4);
+  });
+});
+
+describe('editing a union', () => {
+  it('records what kind of relationship it was', () => {
+    const { union, data } = minimalFamily();
+    const after = updateUnion(data, union.id, { type: UnionType.CASUAL });
+
+    expect(after.unions.find((u) => u.id === union.id).type).to.equal(UnionType.CASUAL);
+  });
+
+  /**
+   * Divorce is not a fourth kind of union. It is a marriage with an end date,
+   * which is also how it leaves in a GEDCOM — MARR alongside DIV.
+   */
+  it('says a marriage ended with an end date, not a different type', () => {
+    const { union, data } = minimalFamily();
+
+    const married = updateUnion(data, union.id, { type: UnionType.MARRIED });
+    const divorced = updateUnion(married, union.id, { endDate: { raw: '1950' } });
+    const result = divorced.unions.find((u) => u.id === union.id);
+
+    expect(result.type).to.equal(UnionType.MARRIED);
+    expect(result.endDate.raw).to.equal('1950');
+    expect(Object.values(UnionType)).to.not.include('DIVORCED');
+  });
+
+  it('leaves every other union alone', () => {
+    const { union, data } = minimalFamily();
+    const other = createUnion({ partner1Id: data.persons[0].id, partner2Id: data.persons[2].id });
+    const withBoth = { ...data, unions: [...data.unions, other] };
+
+    const after = updateUnion(withBoth, union.id, { type: UnionType.PARTNERS });
+    expect(after.unions.find((u) => u.id === other.id).type).to.equal(UnionType.UNKNOWN);
+  });
+});
+
+describe('editing a parent link', () => {
+  it('changes who the parent is, keeping the kind of parent', () => {
+    const { father, mother, child, data } = minimalFamily();
+    const stranger = person('Stranger', { born: '1899' });
+
+    const link = data.parentChildren.find((l) => l.parentId === father.id);
+    const adoptive = updateParentLink(data, link.id, { type: ParentType.ADOPTED });
+    const moved = updateParentLink(
+      { ...adoptive, persons: [...adoptive.persons, stranger] },
+      link.id,
+      { parentId: stranger.id },
+    );
+
+    const result = moved.parentChildren.find((l) => l.id === link.id);
+    expect(result.parentId).to.equal(stranger.id);
+    expect(result.type).to.equal(ParentType.ADOPTED);
+
+    // And the child is now the stranger's, not the father's.
+    const g = buildIndexes(moved);
+    expect(parentsOf(g, child.id).map((p) => p.id)).to.have.members([stranger.id, mother.id]);
+  });
+
+  it('changes the kind of parent without touching the person', () => {
+    const { father, data } = minimalFamily();
+    const link = data.parentChildren.find((l) => l.parentId === father.id);
+
+    const after = updateParentLink(data, link.id, { type: ParentType.STEP });
+    const result = after.parentChildren.find((l) => l.id === link.id);
+
+    expect(result.type).to.equal(ParentType.STEP);
+    expect(result.parentId).to.equal(father.id);
+  });
+});
+
+describe('making a child descend from a couple', () => {
+  it('adds the missing parent and stamps both links with the union', () => {
+    const { child, father, mother, union, data } = childWithOneParentAndAStepIn();
+
+    // Before: the child hangs off the father alone, with no couple recorded.
+    const before = buildIndexes(data);
+    expect(parentsOf(before, child.id).map((p) => p.id)).to.eql([father.id]);
+    expect(parentLinksOf(before, child.id)[0].unionId).to.equal(null);
+
+    const after = buildIndexes(setChildUnion(data, child.id, union));
+    const links = parentLinksOf(after, child.id);
+
+    expect(parentsOf(after, child.id).map((p) => p.id)).to.have.members([father.id, mother.id]);
+    expect(links).to.have.lengthOf(2);
+    expect(links.every((l) => l.unionId === union.id)).to.equal(true);
+  });
+
+  it('does not duplicate the parent who was already linked', () => {
+    const { child, father, link, union, data } = childWithOneParentAndAStepIn();
+    const after = setChildUnion(data, child.id, union);
+
+    const toFather = after.parentChildren.filter(
+      (l) => l.childId === child.id && l.parentId === father.id,
+    );
+
+    expect(toFather).to.have.lengthOf(1);
+    expect(toFather[0].id).to.equal(link.id, 'the existing link is kept, not replaced');
+  });
+
+  it('leaves the graph valid', () => {
+    const { child, union, data } = childWithOneParentAndAStepIn();
+    const after = setChildUnion(data, child.id, union);
+
+    expect(validateBlocking(buildIndexes(after))).to.eql([]);
+  });
+
+  /**
+   * An adoptive parent recorded alongside a biological couple is a real third
+   * link, so attaching the couple must not sweep it away.
+   */
+  it('leaves a parent from outside the couple exactly as they were', () => {
+    const { child, union, data } = childWithOneParentAndAStepIn();
+    const guardian = createPerson({ firstName: 'Guardian' });
+    const guardianLink = createParentChild({
+      parentId: guardian.id,
+      childId: child.id,
+      type: ParentType.GUARDIAN,
+    });
+
+    const withGuardian = {
+      ...data,
+      persons: [...data.persons, guardian],
+      parentChildren: [...data.parentChildren, guardianLink],
+    };
+
+    const after = setChildUnion(withGuardian, child.id, union);
+    const kept = after.parentChildren.find((l) => l.id === guardianLink.id);
+
+    expect(kept.parentId).to.equal(guardian.id);
+    expect(kept.type).to.equal(ParentType.GUARDIAN);
+    expect(kept.unionId).to.equal(null, 'not claimed by a couple it is not part of');
+  });
+
+  it('detaches without removing anybody', () => {
+    const { child, father, mother, union, data } = childWithOneParentAndAStepIn();
+
+    const attached = setChildUnion(data, child.id, union);
+    const detached = buildIndexes(setChildUnion(attached, child.id, null));
+
+    expect(parentsOf(detached, child.id).map((p) => p.id)).to.have.members([father.id, mother.id]);
+    expect(parentLinksOf(detached, child.id).every((l) => l.unionId === null)).to.equal(true);
+  });
+
+  /**
+   * The guarantee the interface leans on: it never has to work out for itself
+   * whether an edit is safe, because the store refuses one that is not.
+   */
+  it('is refused when it would make a third biological parent', () => {
+    const { child, union, data } = childWithOneParentAndAStepIn();
+    const outsider = person('Outsider', { born: '1921' });
+
+    const crowded = {
+      ...data,
+      persons: [...data.persons, outsider],
+      parentChildren: [
+        ...data.parentChildren,
+        createParentChild({ parentId: outsider.id, childId: child.id }),
+      ],
+    };
+
+    expect(validateBlocking(buildIndexes(crowded))).to.eql([], 'two biological parents is fine');
+
+    const after = validateBlocking(buildIndexes(setChildUnion(crowded, child.id, union)));
+    expect(after.map((issue) => issue.ruleId)).to.include('TOO_MANY_BIO_PARENTS');
+  });
+
+  it('is refused when a parent change would close a loop', () => {
+    const { father, child, data } = minimalFamily();
+    const link = data.parentChildren.find((l) => l.parentId === father.id);
+
+    // Making the child their own father's parent is the loop the editor's
+    // search refuses to offer in the first place.
+    const looped = updateParentLink(data, link.id, { parentId: child.id });
+    const found = validateBlocking(buildIndexes(looped)).map((issue) => issue.ruleId);
+
+    expect(found).to.include.oneOf(['CYCLE', 'SELF_PARENT']);
+  });
+});
+
+/**
+ * The same operations again, but through the real actions and the real store.
+ *
+ * Everything above tests the transform in isolation, which proves the shape is
+ * right and nothing else. The claim the interface actually leans on — that an
+ * edit which would corrupt the graph is REFUSED rather than applied — lives in
+ * the store, so it has to be tested there.
+ */
+describe('through the store', () => {
+  let folder = null;
+
+  beforeEach(async () => {
+    folder = await createBrowserFolder('Relations test');
+  });
+
+  afterEach(async () => {
+    store.close();
+    await removeBrowserFolder(folder.name).catch(() => {});
+  });
+
+  const openWith = (data) => store.adoptNew(data, folder);
+
+  it('attaches a child to a couple in one action', async () => {
+    const { child, father, mother, union, data } = childWithOneParentAndAStepIn();
+    await openWith(data);
+
+    const result = actions.setChildUnion(child.id, union.id);
+    expect(result.ok).to.equal(true);
+
+    const links = parentLinksOf(store.graph, child.id);
+    expect(links.map((l) => l.parentId)).to.have.members([father.id, mother.id]);
+    expect(links.every((l) => l.unionId === union.id)).to.equal(true);
+  });
+
+  it('refuses a parent link that would close a loop, and says why', async () => {
+    const { father, child, data } = minimalFamily();
+    await openWith(data);
+
+    const link = parentLinksOf(store.graph, child.id).find((l) => l.parentId === father.id);
+    const result = actions.updateParentLink(link.id, { parentId: child.id });
+
+    expect(result.ok).to.equal(false);
+    expect(result.errors.map((issue) => issue.ruleId)).to.include.oneOf(['CYCLE', 'SELF_PARENT']);
+
+    // And nothing moved: a refused edit leaves the graph exactly as it was.
+    expect(parentLinksOf(store.graph, child.id).find((l) => l.id === link.id).parentId).to.equal(
+      father.id,
+    );
+  });
+
+  it('records the kind of relationship, and that a marriage ended', async () => {
+    const { union, data } = minimalFamily();
+    await openWith(data);
+
+    expect(actions.updateUnion(union.id, { type: UnionType.MARRIED }).ok).to.equal(true);
+    expect(actions.updateUnion(union.id, { endDate: parseDate('1962') }).ok).to.equal(true);
+
+    const saved = store.graph.unions.get(union.id);
+    expect(saved.type).to.equal(UnionType.MARRIED);
+    expect(saved.endDate.raw).to.equal('1962');
+  });
+
+  it('puts a refused edit back on the undo stack unchanged', async () => {
+    const { father, child, data } = minimalFamily();
+    await openWith(data);
+
+    const before = store.canUndo;
+    const link = parentLinksOf(store.graph, child.id).find((l) => l.parentId === father.id);
+    actions.updateParentLink(link.id, { parentId: child.id });
+
+    expect(store.canUndo).to.equal(before, 'a refusal is not an edit to undo');
+  });
+});

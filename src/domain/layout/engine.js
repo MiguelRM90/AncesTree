@@ -74,37 +74,74 @@ export function buildLayout(g, focalId, { up = 4, down = 4, metrics = LAYOUT } =
 // --- Phase 2: blocks -------------------------------------------------------
 
 /**
- * A block is one couple, or one person with no visible partner. Blocks are the
- * unit that gets ordered and positioned, because a couple that drifts apart in
- * a row is a couple whose connecting line crosses everyone in between.
+ * A block is one person together with every visible partner they had. Blocks
+ * are the unit that gets ordered and positioned, because a couple that drifts
+ * apart in a row is a couple whose connecting line crosses everyone in between.
+ *
+ * With more than one partner the person goes in the MIDDLE, partners to either
+ * side. Appending them in a row instead produced
+ *
+ *     [T1] · [T2] · [T3]
+ *
+ * where the second dot sits between T2 and T3 and reads as though THEY were the
+ * couple. The edges were right the whole time; the arrangement lied about them.
+ * Centred, each dot sits between the person and the partner it actually joins:
+ *
+ *     [T2] · [T1] · [T3]
+ *
+ * Three or more partners cannot all be adjacent on one line, so the outermost
+ * ones do get a stem passing over a neighbour. Two is the case that happens —
+ * a remarriage — and two is exact.
  */
 function buildBlocks(g, ids, metrics) {
   const placed = new Set();
   const blocks = [];
 
-  for (const person of sortByBirth([...ids].map((id) => g.persons.get(id)).filter(Boolean))) {
+  for (const person of anchorOrder(g, ids)) {
     if (placed.has(person.id)) continue;
     placed.add(person.id);
 
-    const items = [{ type: NodeType.PERSON, entityId: person.id }];
-    const members = [person.id];
-
+    // Gathered before any of it is placed: which side a partner goes on depends
+    // on how many there turn out to be.
+    const partners = [];
     for (const union of unionsOf(g, person.id)) {
       const partnerId = partnerIn(union, person.id);
       if (!ids.has(partnerId) || placed.has(partnerId)) continue;
-
       placed.add(partnerId);
+      partners.push({ unionId: union.id, partnerId });
+    }
+
+    // Earlier unions inwards, so the row still reads left to right in time.
+    const half = Math.floor(partners.length / 2);
+    const before = partners.slice(0, half);
+    const after = partners.slice(half);
+
+    const items = [];
+    for (const { unionId, partnerId } of [...before].reverse()) {
       items.push(
-        { type: NodeType.UNION, entityId: union.id },
+        { type: NodeType.PERSON, entityId: partnerId },
+        { type: NodeType.UNION, entityId: unionId },
+      );
+    }
+
+    const anchorOffset = widthBefore(items.length, metrics);
+    items.push({ type: NodeType.PERSON, entityId: person.id });
+
+    for (const { unionId, partnerId } of after) {
+      items.push(
+        { type: NodeType.UNION, entityId: unionId },
         { type: NodeType.PERSON, entityId: partnerId },
       );
-      members.push(partnerId);
     }
 
     blocks.push({
       id: person.id,
       items,
-      members,
+      members: [person.id, ...partners.map((p) => p.partnerId)],
+      // Where this block's own person sits inside it. Everything that centres
+      // one row over another aims at a person's card, and with partners on the
+      // left that card is no longer at block.x.
+      anchorOffset,
       birth: person.birth?.date?.earliest ?? null,
       width: widthOf(items, metrics),
       below: [],
@@ -115,6 +152,32 @@ function buildBlocks(g, ids, metrics) {
   }
 
   return blocks;
+}
+
+/** Width of `count` leading [partner, union] items, trailing gap included. */
+const widthBefore = (count, metrics) =>
+  (count / 2) * (metrics.cardWidth + metrics.unionSize + 2 * metrics.itemGap);
+
+/**
+ * Who each block gets built around: most partners first, then birth order.
+ *
+ * A block is anchored on the first of its people reached, and any partner
+ * already placed is skipped. Reaching a remarried person's FIRST spouse first
+ * therefore built [spouse · person] and then found nothing left to attach the
+ * second marriage to — the union was not merely drawn in the wrong place, it
+ * was never drawn at all, and the row read as a chain of three.
+ *
+ * Anchoring on the person with the most partners fixes that. sort is stable, so
+ * everyone with a single partner keeps the birth order they had before.
+ */
+function anchorOrder(g, ids) {
+  const people = sortByBirth([...ids].map((id) => g.persons.get(id)).filter(Boolean));
+
+  const visiblePartners = (person) =>
+    unionsOf(g, person.id).filter((union) => ids.has(partnerIn(union, person.id))).length;
+
+  const counts = new Map(people.map((person) => [person.id, visiblePartners(person)]));
+  return people.sort((a, b) => counts.get(b.id) - counts.get(a.id));
 }
 
 const widthOf = (items, metrics) =>
@@ -346,10 +409,13 @@ function centredOver(block, children, left, spread, metrics) {
 
   const first = children[0];
   const last = children[children.length - 1];
-  const bar = (first.x + last.x + metrics.cardWidth) / 2;
+  const bar = (cardLeft(first) + cardLeft(last) + metrics.cardWidth) / 2;
 
-  return clamp(bar - block.width / 2, left, left + spread - block.width);
+  return clamp(bar - block.width / 2 - block.anchorOffset, left, left + spread - block.width);
 }
+
+/** The left edge of a block's own person, which is not always its left edge. */
+const cardLeft = (block) => block.x + block.anchorOffset;
 
 const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 
@@ -382,10 +448,12 @@ function positionUp(blocks, metrics) {
     // children's own cards rather than their blocks, so the stem lands in the
     // middle of the bar it descends to.
     const children = members.flatMap((block) => block.below);
-    const left = Math.min(...children.map((child) => child.x));
-    const right = Math.max(...children.map((child) => child.x + metrics.cardWidth));
+    const left = Math.min(...children.map((child) => cardLeft(child)));
+    const right = Math.max(...children.map((child) => cardLeft(child) + metrics.cardWidth));
 
-    return { members, width, desired: (left + right) / 2 - width / 2 };
+    // The group is centred, then shifted so it is the FIRST member's own person
+    // that lands over the middle — not whichever partner happens to start it.
+    return { members, width, desired: (left + right) / 2 - width / 2 - members[0].anchorOffset };
   });
 
   laid.sort((a, b) => a.desired - b.desired);

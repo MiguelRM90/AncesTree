@@ -28,6 +28,32 @@ export function childrenOf(g, personId, { biologicalOnly = false } = {}) {
     .filter(Boolean);
 }
 
+/**
+ * Everyone below this person, plus the person themselves.
+ *
+ * The set of people who cannot become one of their parents: the CYCLE rule
+ * would reject it, and an interface that offers a choice it is about to refuse
+ * is worse than one that never offers it.
+ *
+ * Iterative, and it marks a person on the way in rather than on the way out —
+ * a tree where two branches meet again lower down would otherwise be walked
+ * once per path through it.
+ */
+export function descendantIds(g, personId) {
+  const seen = new Set([personId]);
+  const stack = [personId];
+
+  while (stack.length > 0) {
+    for (const link of childLinksOf(g, stack.pop())) {
+      if (seen.has(link.childId)) continue;
+      seen.add(link.childId);
+      stack.push(link.childId);
+    }
+  }
+
+  return seen;
+}
+
 /** The other person in a union. */
 export function partnerIn(union, personId) {
   return union.partner1Id === personId ? union.partner2Id : union.partner1Id;

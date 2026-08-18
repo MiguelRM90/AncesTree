@@ -39,3 +39,12 @@ export const TRAIL_LENGTH = 50;
 export const SEARCH_RESULTS = 20;
 export const SEARCH_DEBOUNCE_MS = 120;
 export const RESIZE_DEBOUNCE_MS = 100;
+
+/**
+ * How long typing a union date settles before it is committed.
+ *
+ * Longer than the search debounce on purpose: this one writes to the project
+ * and pushes an undo step, so it should fire once when the year is finished
+ * rather than four times on the way to it.
+ */
+export const RELATION_EDIT_DEBOUNCE_MS = 600;

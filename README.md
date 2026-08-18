@@ -57,6 +57,10 @@ Zipping that folder produces a file another relative can open and carry on with.
 - **Honest genealogy**: adoptions and guardianships distinguished from the
   biological line, unknown parents, unions between relatives. The application
   warns; it does not refuse.
+- **Relationships are editable**: what kind of union it was and when it ended,
+  who a child's parents are, and whether they descend from a couple or
+  from one person. Anything that would corrupt the tree is refused, with a
+  reason.
 - **Interoperable**: GEDCOM 5.5.1 in and out, with the full cycle verified over
   a 10,000-person archive.
 - **Accessible**: keyboard navigation, screen reader support, and a colour
@@ -103,7 +107,7 @@ refuses to open.
 ```bash
 npm install
 npm run dev      # http://localhost:5173/AncesTree/
-npm test         # 226 tests, in a real browser
+npm test         # 248 tests, in a real browser
 npm run lint
 npm run build    # dist/, ready for GitHub Pages
 ```

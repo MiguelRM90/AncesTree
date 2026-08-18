@@ -47,6 +47,7 @@ import {
   createParentChild,
   mediaLink,
   MediaRole,
+  ParentType,
 } from '../domain/model/factories.js';
 import { unionsOf, partnerIn, mediaOf } from '../domain/graph/queries.js';
 
@@ -311,6 +312,101 @@ export function addChildFor(parentId) {
   );
 
   return result.ok ? { ...result, person: child } : result;
+}
+
+// --- Relationships ---------------------------------------------------------
+
+/**
+ * Editing relationships needs no validation of its own.
+ *
+ * Every one of these goes through store.apply, which refuses any change that
+ * introduces a blocking error — a person as their own parent, a loop in the
+ * lineage, the same pair linked twice, a third biological parent, a reference
+ * to something that is not there. So "it must not be left in an unstable
+ * state" is not a promise made again here; it is the same guarantee every
+ * other mutation already gets, and the caller reports the refusal.
+ */
+
+/** Type, dates or notes of a union. A marriage that ended has an endDate. */
+export function updateUnion(unionId, changes) {
+  return store.apply(
+    (project) => ({
+      ...project,
+      unions: project.unions.map((union) =>
+        union.id === unionId ? { ...union, ...changes } : union,
+      ),
+    }),
+    { label: 'edit union' },
+  );
+}
+
+/** Which parent a link points at, or what kind of parent they are. */
+export function updateParentLink(linkId, changes) {
+  return store.apply(
+    (project) => ({
+      ...project,
+      parentChildren: project.parentChildren.map((link) =>
+        link.id === linkId ? { ...link, ...changes } : link,
+      ),
+    }),
+    { label: 'edit parent' },
+  );
+}
+
+/** Links an existing person to an existing child. */
+export function addParentLink(childId, parentId, { type = ParentType.BIOLOGICAL } = {}) {
+  const link = createParentChild({ parentId, childId, type });
+
+  const result = store.apply(
+    (project) => ({ ...project, parentChildren: [...project.parentChildren, link] }),
+    { label: 'add parent' },
+  );
+
+  return result.ok ? { ...result, link } : result;
+}
+
+/**
+ * Makes a child descend from a COUPLE rather than from one person.
+ *
+ * This is the operation the interface was missing. Adding a parent and then
+ * giving that parent a partner leaves the child attached to one of them only —
+ * which is correct, since nothing said the partner was the other parent, but
+ * there was no way to say afterwards that they were.
+ *
+ * Both partners end up as parents: the one already linked keeps their link and
+ * gains the unionId, the other gets a link created. A parent from outside the
+ * union is left exactly as they were, because they may well be a real third
+ * link — an adoptive parent alongside a biological couple.
+ *
+ * Passing null detaches the child from the couple without removing anybody:
+ * the parents stay, they simply stop being recorded as a pair here.
+ */
+export function setChildUnion(childId, unionId) {
+  const union = unionId ? store.graph?.unions.get(unionId) : null;
+  if (unionId && !union) return { ok: false, reason: 'none' };
+
+  const partnerIds = union ? [union.partner1Id, union.partner2Id] : [];
+
+  return store.apply(
+    (project) => {
+      const linked = new Set(
+        project.parentChildren.filter((link) => link.childId === childId).map((l) => l.parentId),
+      );
+
+      const updated = project.parentChildren.map((link) => {
+        if (link.childId !== childId) return link;
+        if (!union) return link.unionId === null ? link : { ...link, unionId: null };
+        return partnerIds.includes(link.parentId) ? { ...link, unionId } : link;
+      });
+
+      const added = partnerIds
+        .filter((parentId) => !linked.has(parentId))
+        .map((parentId) => createParentChild({ parentId, childId, unionId }));
+
+      return { ...project, parentChildren: [...updated, ...added] };
+    },
+    { label: 'set couple' },
+  );
 }
 
 /**

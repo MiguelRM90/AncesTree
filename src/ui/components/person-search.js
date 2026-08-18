@@ -25,6 +25,8 @@ export class PersonSearch extends HTMLElement {
   #graph = null;
   #results = [];
   #active = -1;
+  #event = 'person:reveal';
+  #exclude = null;
 
   constructor() {
     super();
@@ -65,9 +67,47 @@ export class PersonSearch extends HTMLElement {
     this.#close();
   }
 
+  /**
+   * What choosing a result means here.
+   *
+   * The toolbar's search navigates; the same control inside the relationship
+   * editor picks somebody to link. One implementation, because a second search
+   * box would be a second set of keyboard behaviour to get right.
+   */
+  set eventName(type) {
+    this.#event = type || 'person:reveal';
+  }
+
+  /** People this search must not offer. Used to keep a lineage acyclic. */
+  set exclude(ids) {
+    this.#exclude = ids ?? null;
+  }
+
+  set placeholder(text) {
+    this.#input.placeholder = text;
+    this.#input.setAttribute('aria-label', text);
+  }
+
+  /** Empties the box without firing anything. */
+  reset() {
+    this.#input.value = '';
+    this.#results = [];
+    this.#close();
+  }
+
   #onInput = debounce(() => {
     if (!this.#graph) return;
-    this.#results = searchPeople(this.#graph, this.#input.value, { limit: SEARCH_RESULTS });
+
+    // Over-fetched and then filtered: asking for N and discarding some would
+    // quietly return fewer than N results for no reason the user can see.
+    const found = searchPeople(this.#graph, this.#input.value, {
+      limit: this.#exclude ? SEARCH_RESULTS + this.#exclude.size : SEARCH_RESULTS,
+    });
+
+    this.#results = (this.#exclude ? found.filter((p) => !this.#exclude.has(p.id)) : found).slice(
+      0,
+      SEARCH_RESULTS,
+    );
     this.#active = -1;
     this.#render();
   }, SEARCH_DEBOUNCE_MS);
@@ -100,10 +140,8 @@ export class PersonSearch extends HTMLElement {
   };
 
   #choose(result) {
-    this.#input.value = '';
-    this.#results = [];
-    this.#close();
-    emit(this, 'person:reveal', { personId: result.id });
+    this.reset();
+    emit(this, this.#event, { personId: result.id });
   }
 
   #close() {

@@ -183,6 +183,55 @@ export const en = {
     hasNote: 'Has a written note',
   },
 
+  relations: {
+    title: (name) => `Relationships of ${name}`,
+    open: 'Relationships',
+    done: 'Done',
+    cancel: 'Cancel',
+    change: 'Change',
+    remove: 'Remove',
+    unknownPerson: 'Unknown',
+
+    parents: 'Parents',
+    noParents: 'No parents recorded.',
+    parentType: 'Kind of parent',
+    addParent: 'Search for a parent to add…',
+    addParentHint:
+      'Anyone can be added. This person and everybody descended from them are not offered: that would be a loop.',
+    changeParent: (name) => `Replace ${name} with somebody else`,
+    removeParent: (name) => `Remove ${name} as a parent`,
+    replacing: (name) => `Replace ${name} with…`,
+
+    couple: 'Descends from the couple',
+    noCouple: 'Not recorded as a couple',
+    coupleOf: (a, b) => `${a} and ${b}`,
+    coupleHint:
+      'Choosing a couple makes both of them parents. Any other parent already recorded is left alone.',
+
+    partners: 'Partners',
+    noPartners: 'No partners recorded.',
+    unionType: 'Kind of relationship',
+    started: 'From',
+    ended: 'Until',
+    removeUnion: (name) => `Remove the relationship with ${name}`,
+  },
+
+  /** How two people were together. A marriage that ended has an end date. */
+  unionType: {
+    MARRIED: 'Married',
+    PARTNERS: 'Partners',
+    CASUAL: 'Occasional',
+    UNKNOWN: 'Not recorded',
+  },
+
+  parentType: {
+    BIOLOGICAL: 'Biological',
+    ADOPTED: 'Adoptive',
+    FOSTER: 'Foster',
+    STEP: 'Step',
+    GUARDIAN: 'Guardian',
+  },
+
   review: {
     title: 'Review the archive',
     all: 'Everything',

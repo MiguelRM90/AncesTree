@@ -186,6 +186,55 @@ export const es = {
     hasNote: 'Tiene una nota escrita',
   },
 
+  relations: {
+    title: (name) => `Relaciones de ${name}`,
+    open: 'Relaciones',
+    done: 'Listo',
+    cancel: 'Cancelar',
+    change: 'Cambiar',
+    remove: 'Quitar',
+    unknownPerson: 'Desconocida',
+
+    parents: 'Progenitores',
+    noParents: 'No hay progenitores registrados.',
+    parentType: 'Tipo de progenitor',
+    addParent: 'Busca un progenitor para añadir…',
+    addParentHint:
+      'Se puede añadir a cualquiera. Esta persona y todos sus descendientes no aparecen: sería un bucle.',
+    changeParent: (name) => `Sustituir a ${name} por otra persona`,
+    removeParent: (name) => `Quitar a ${name} como progenitor`,
+    replacing: (name) => `Sustituir a ${name} por…`,
+
+    couple: 'Desciende de la pareja',
+    noCouple: 'Sin pareja registrada',
+    coupleOf: (a, b) => `${a} y ${b}`,
+    coupleHint:
+      'Al elegir una pareja, los dos pasan a ser progenitores. Cualquier otro progenitor ya registrado se deja como está.',
+
+    partners: 'Parejas',
+    noPartners: 'No hay parejas registradas.',
+    unionType: 'Tipo de relación',
+    started: 'Desde',
+    ended: 'Hasta',
+    removeUnion: (name) => `Quitar la relación con ${name}`,
+  },
+
+  /** Cómo estuvieron juntos. Un matrimonio que acabó lleva fecha de fin. */
+  unionType: {
+    MARRIED: 'Casados',
+    PARTNERS: 'Pareja',
+    CASUAL: 'Esporádica',
+    UNKNOWN: 'Sin registrar',
+  },
+
+  parentType: {
+    BIOLOGICAL: 'Biológico',
+    ADOPTED: 'Adoptivo',
+    FOSTER: 'De acogida',
+    STEP: 'Padrastro o madrastra',
+    GUARDIAN: 'Tutor',
+  },
+
   notice: {
     dismiss: 'Descartar',
     changeRejected: 'Ese cambio no se guardó',
