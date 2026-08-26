@@ -137,6 +137,7 @@ export const es = {
     secondLastName: 'Segundo apellido',
     sex: 'Sexo',
     nationality: 'Nacionalidad',
+    countrySearch: 'Buscar países',
     noNationality: 'Sin registrar',
     birth: 'Nacimiento',
     death: 'Defunción',

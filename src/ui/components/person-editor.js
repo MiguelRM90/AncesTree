@@ -13,10 +13,9 @@ import { S } from '../../config/strings.js';
 import { describeIssue } from '../issue-text.js';
 import { parseDate } from '../../domain/date/parse.js';
 import { Sex, MediaRole } from '../../domain/model/factories.js';
-import { countriesByName, countryFlag } from '../../domain/model/countries.js';
-import { supportsFlagEmoji } from '../flag-support.js';
 import './date-field.js';
 import './person-photo.js';
+import './country-search.js';
 
 const styles = sheet(css);
 
@@ -118,7 +117,7 @@ export class PersonEditor extends HTMLElement {
 
     // Enter saves from any single-line field; Escape closes via the dialog.
     dialog.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter' && event.target.tagName === 'INPUT') {
+      if (event.key === 'Enter' && event.target.tagName === 'INPUT' && event.target.type !== 'search') {
         event.preventDefault();
         this.#save();
       }
@@ -357,17 +356,7 @@ function select() {
  * way a card can, so there the name carries it alone.
  */
 function countrySelect() {
-  const node = document.createElement('select');
-  node.append(el('option', { text: S.editor.noNationality, attrs: { value: '' } }));
-
-  const flags = supportsFlagEmoji();
-
-  for (const { code, name } of countriesByName()) {
-    const label = flags ? `${countryFlag(code)}  ${name}` : `${name}  (${code})`;
-    node.append(el('option', { text: label, attrs: { value: code } }));
-  }
-
-  return node;
+  return document.createElement('country-search');
 }
 
 function labelled(text, field) {

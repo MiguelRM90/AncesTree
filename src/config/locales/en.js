@@ -130,6 +130,7 @@ export const en = {
     secondLastName: 'Second surname',
     sex: 'Sex',
     nationality: 'Nationality',
+    countrySearch: 'Search countries',
     noNationality: 'Not recorded',
     birth: 'Born',
     death: 'Died',
