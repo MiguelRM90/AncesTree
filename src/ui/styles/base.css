@@ -32,6 +32,31 @@ button.primary {
   color: var(--c-on-accent);
 }
 
+input,
+select,
+textarea {
+  font: inherit;
+  color: var(--c-text);
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  padding: var(--s-2);
+  min-width: 0;
+}
+
+input::placeholder {
+  color: var(--c-text-muted);
+}
+
+@media (pointer: coarse) {
+  button,
+  input,
+  select,
+  textarea {
+    min-height: 2.75rem;
+  }
+}
+
 /**
  * The ring sits OUTSIDE the control thanks to outline-offset, so it is drawn
  * against the surrounding surface rather than against the button's own colour.

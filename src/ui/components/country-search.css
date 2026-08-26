@@ -4,19 +4,6 @@
   min-width: 0;
 }
 
-input {
-  font: inherit;
-  width: 100%;
-  color: var(--c-text);
-  background: var(--c-bg);
-  border: 1px solid var(--c-border);
-  border-radius: var(--radius-sm);
-  padding: var(--s-2);
-  box-sizing: border-box;
-}
-
-input::placeholder { color: var(--c-text-muted); }
-
 .results {
   position: absolute;
   z-index: 20;
@@ -54,8 +41,4 @@ li[aria-selected='true'] button {
   padding: var(--s-2);
   font-size: var(--fs-sm);
   color: var(--c-text-muted);
-}
-
-@media (pointer: coarse) {
-  button, input { min-height: 2.75rem; }
 }

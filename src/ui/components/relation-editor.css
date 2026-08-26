@@ -44,17 +44,6 @@ fieldset {
 legend { font-size: var(--fs-sm); color: var(--c-text-muted); padding: 0 var(--s-1); }
 .note { margin: 0; font-size: var(--fs-sm); color: var(--c-text-muted); }
 
-select, input {
-  font: inherit;
-  color: var(--c-text);
-  background: var(--c-bg);
-  border: 1px solid var(--c-border);
-  border-radius: var(--radius-sm);
-  padding: var(--s-2);
-  min-width: 0;
-  box-sizing: border-box;
-}
-
 select:disabled { color: var(--c-text-muted); background: var(--c-surface-sunken); }
 
 /* --- Rows ---------------------------------------------------------------- */
@@ -116,14 +105,6 @@ footer {
   border-top: 1px solid var(--c-border-subtle);
   background: var(--c-surface-sunken);
   flex: 0 0 auto;
-}
-
-/**
- * A finger is not a mouse pointer: 44 px is the smallest control most people
- * can hit reliably, and the default padding leaves these around 34.
- */
-@media (pointer: coarse) {
-  button, select, input { min-height: 2.75rem; }
 }
 
 /**

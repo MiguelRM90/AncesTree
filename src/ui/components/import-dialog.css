@@ -61,10 +61,6 @@ footer {
  * A finger is not a mouse pointer: 44 px is the smallest control most people
  * can hit reliably, and the default padding leaves these around 34.
  */
-@media (pointer: coarse) {
-  button, select, input { min-height: 2.75rem; }
-}
-
 /* Phone width. Last in the file, after every rule it overrides. */
 @media (max-width: 640px) {
   .body { padding: var(--s-4); gap: var(--s-3); }

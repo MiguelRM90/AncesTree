@@ -51,17 +51,6 @@ h2 { margin: 0; font-size: var(--fs-lg); }
 .pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--s-3); }
 label { display: grid; gap: var(--s-1); font-size: var(--fs-sm); color: var(--c-text-muted); }
 
-input, select, textarea {
-  font: inherit;
-  color: var(--c-text);
-  background: var(--c-bg);
-  border: 1px solid var(--c-border);
-  border-radius: var(--radius-sm);
-  padding: var(--s-2);
-  /* So a field can be narrower than its own default size, padding included. */
-  min-width: 0;
-  box-sizing: border-box;
-}
 textarea { resize: vertical; min-height: 4rem; }
 
 fieldset {
@@ -120,14 +109,6 @@ footer {
   flex: 0 0 auto;
 }
 footer .danger { margin-right: auto; color: var(--c-error); border-color: var(--c-error); }
-
-/**
- * A finger is not a mouse pointer: 44 px is the smallest control most people
- * can hit reliably, and the default padding leaves these around 34.
- */
-@media (pointer: coarse) {
-  button, select, input { min-height: 2.75rem; }
-}
 
 /**
  * Phone width. Last in the file, after every rule it overrides.
