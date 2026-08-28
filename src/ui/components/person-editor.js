@@ -27,6 +27,7 @@ export class PersonEditor extends HTMLElement {
   #issues = [];
   #graph = null;
   #resolvePhoto = null;
+  #isNew = false;
 
   constructor() {
     super();
@@ -44,13 +45,14 @@ export class PersonEditor extends HTMLElement {
   /**
    * Opens the editor for a person. The caller keeps ownership of the data.
    * @param {object} person
-   * @param {{photos?: object[], issues?: object[], graph?: object}} [context]
+   * @param {{photos?: object[], issues?: object[], graph?: object, isNew?: boolean}} [context]
    */
-  open(person, { photos = [], issues = [], graph = null } = {}) {
+  open(person, { photos = [], issues = [], graph = null, isNew = false } = {}) {
     this.#person = person;
     this.#photos = photos;
     this.#issues = issues;
     this.#graph = graph;
+    this.#isNew = isNew;
     this.#renderGallery();
     this.#renderReview();
 
@@ -69,12 +71,17 @@ export class PersonEditor extends HTMLElement {
     this.#fields.deathPlace.value = person.death?.place ?? '';
 
     this.#fields.placeholderNote.hidden = !person.isPlaceholder;
+    this.#fields.remove.hidden = isNew;
 
     this.#dialog.showModal();
     this.#fields.firstName.focus();
   }
 
   close() {
+    if (this.#isNew && this.#person) {
+      emit(this, 'person:delete', { personId: this.#person.id });
+      this.#isNew = false;
+    }
     this.#dialog.close();
   }
 
@@ -86,6 +93,10 @@ export class PersonEditor extends HTMLElement {
 
     dialog.addEventListener('click', (event) => {
       if (event.target === dialog) this.close();
+    });
+    dialog.addEventListener('cancel', (event) => {
+      event.preventDefault();
+      this.close();
     });
 
 
@@ -105,7 +116,7 @@ export class PersonEditor extends HTMLElement {
 
     const save = el('button', { class: 'primary', text: S.editor.save, attrs: { type: 'button' } });
     const cancel = el('button', { text: S.editor.cancel, attrs: { type: 'button' } });
-    const remove = el('button', {
+    this.#fields.remove = el('button', {
       class: 'danger',
       text: S.editor.remove,
       attrs: { type: 'button' },
@@ -113,7 +124,7 @@ export class PersonEditor extends HTMLElement {
 
     save.addEventListener('click', () => this.#save());
     cancel.addEventListener('click', () => this.close());
-    remove.addEventListener('click', () => this.#remove());
+    this.#fields.remove.addEventListener('click', () => this.#remove());
 
     // Enter saves from any single-line field; Escape closes via the dialog.
     dialog.addEventListener('keydown', (event) => {
@@ -152,7 +163,7 @@ export class PersonEditor extends HTMLElement {
           this.#reviewFieldset(),
         ],
       }),
-      el('footer', { children: [remove, cancel, save] }),
+      el('footer', { children: [this.#fields.remove, cancel, save] }),
     );
 
     return dialog;
@@ -296,6 +307,7 @@ export class PersonEditor extends HTMLElement {
     if (!this.#person) return;
 
     const firstName = this.#fields.firstName.value.trim();
+    this.#isNew = false;
 
     emit(this, 'person:save', {
       personId: this.#person.id,
@@ -320,6 +332,7 @@ export class PersonEditor extends HTMLElement {
   #remove() {
     if (!this.#person) return;
     if (!window.confirm(S.editor.confirmRemove)) return;
+    this.#isNew = false;
     emit(this, 'person:delete', { personId: this.#person.id });
     this.close();
   }

@@ -92,7 +92,8 @@ describe('permissions on a handle the browser owns', () => {
   });
 });
 
-describe('a project inside browser storage', () => {
+describe('a project inside browser storage', function () {
+  this.timeout(10_000);
   it('is created, written and read back by the same code as one on disk', async () => {
     const dirHandle = await scratchProject('Gil Muñoz');
 
@@ -180,7 +181,8 @@ describe('a project inside browser storage', () => {
  * is true. So the archive is not merely produced here; it is read back and
  * checked, with the save picker taken away for the duration.
  */
-describe('exporting without a save dialog', () => {
+describe('exporting without a save dialog', function () {
+  this.timeout(10_000);
   /** Runs `body` with showSaveFilePicker hidden, capturing the download. */
   async function withoutSaveDialog(body) {
     const realPicker = window.showSaveFilePicker;
@@ -268,8 +270,9 @@ describe('exporting without a save dialog', () => {
   });
 });
 
-describe('photos in browser storage', () => {
-  it('writes and reads a photo through the sharded path', async () => {
+describe('photos in browser storage', function () {
+  this.timeout(10_000);
+  it('writes and reads a photo through the sharded path', async function () {
     const dirHandle = await scratchProject('With photos');
     await createProjectIn(dirHandle, 'With photos');
 

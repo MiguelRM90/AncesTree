@@ -391,14 +391,14 @@ export class AppRoot extends HTMLElement {
     }
     // A new relative starts blank, so the editor opens straight away: creating
     // an unnamed person and leaving the user to find them is not useful.
-    this.#editPerson(result.person.id);
+    this.#editPerson(result.person.id, { isNew: true });
   }
 
   #editFocal() {
     if (store.focalPersonId !== null) this.#editPerson(store.focalPersonId);
   }
 
-  #editPerson(personId) {
+  #editPerson(personId, { isNew = false } = {}) {
     const person = store.graph?.persons.get(personId);
     if (!person) return;
 
@@ -411,6 +411,7 @@ export class AppRoot extends HTMLElement {
       photos: mediaOf(store.graph, personId),
       issues: store.issuesFor(personId),
       graph: store.graph,
+      isNew,
     });
   }
 
@@ -832,7 +833,7 @@ export class AppRoot extends HTMLElement {
 
     add.addEventListener('click', () => {
       const result = actions.addPerson();
-      if (result.ok) this.#editPerson(result.person.id);
+      if (result.ok) this.#editPerson(result.person.id, { isNew: true });
     });
 
     clear(this.#surface).append(
