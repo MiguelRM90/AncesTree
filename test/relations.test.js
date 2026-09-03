@@ -381,6 +381,22 @@ describe('through the store', () => {
     expect(links.every((l) => l.unionId === unions[0].id)).to.equal(true);
   });
 
+  it('removes the second parent and its union when creation is cancelled', async () => {
+    const child = person('Child');
+    const mother = person('Mother');
+    const motherLink = createParentChild({ parentId: mother.id, childId: child.id });
+    await openWith(project({ persons: [child, mother], parentChildren: [motherLink] }));
+
+    const result = actions.addParentFor(child.id);
+    expect(result.ok).to.equal(true);
+    expect(actions.removeEntity('person', result.person.id).ok).to.equal(true);
+
+    expect(store.graph.persons.has(result.person.id)).to.equal(false);
+    expect([...store.graph.unions.values()]).to.have.lengthOf(0);
+    expect(parentLinksOf(store.graph, child.id)).to.have.lengthOf(1);
+    expect(parentLinksOf(store.graph, child.id)[0].parentId).to.equal(mother.id);
+  });
+
   it('automatically creates a union when adding a second biological parent via addParentLink', async () => {
     const child = person('Child');
     const father = person('Father');

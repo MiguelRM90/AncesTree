@@ -637,11 +637,21 @@ export function removeEntity(kind, id) {
   return store.apply(
     (p) => {
       if (kind === 'person') {
+        const removedUnionIds = new Set(
+          p.unions
+            .filter((u) => u.partner1Id === id || u.partner2Id === id)
+            .map((u) => u.id),
+        );
+
         return {
           ...p,
           persons: p.persons.filter((x) => x.id !== id),
-          unions: p.unions.filter((u) => u.partner1Id !== id && u.partner2Id !== id),
-          parentChildren: p.parentChildren.filter((l) => l.parentId !== id && l.childId !== id),
+          unions: p.unions.filter((u) => !removedUnionIds.has(u.id)),
+          parentChildren: p.parentChildren
+            .filter((l) => l.parentId !== id && l.childId !== id)
+            .map((l) =>
+              removedUnionIds.has(l.unionId) ? { ...l, unionId: null } : l,
+            ),
           settings:
             p.settings.focalPersonId === id
               ? { ...p.settings, focalPersonId: nextFocalAfter(p, id) }
