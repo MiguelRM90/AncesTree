@@ -27,6 +27,7 @@ import {
   parentLinksOf,
   unionsOf,
   partnerIn,
+  partnersOf,
   descendantIds,
 } from '../../domain/graph/queries.js';
 import './date-field.js';
@@ -41,6 +42,7 @@ export class RelationEditor extends HTMLElement {
   #couple;
   #partners;
   #search;
+  #partnerSearch;
   #personId = null;
   /**
    * A getter rather than a snapshot. Every change rewrites the graph, so a copy
@@ -66,11 +68,15 @@ export class RelationEditor extends HTMLElement {
     this.#personId = personId;
     this.#getGraph = getGraph;
     this.#replacing = null;
+    this.#search.reset();
+    this.#partnerSearch.reset();
     this.#render();
     this.#dialog.showModal();
   }
 
   close() {
+    this.#search.reset();
+    this.#partnerSearch.reset();
     this.#dialog.close();
   }
 
@@ -96,6 +102,11 @@ export class RelationEditor extends HTMLElement {
     this.#search.placeholder = S.relations.addParent;
     this.addEventListener('relation:pick', this.#onPick);
 
+    this.#partnerSearch = document.createElement('person-search');
+    this.#partnerSearch.eventName = 'relation:pick-partner';
+    this.#partnerSearch.placeholder = S.relations.addPartner;
+    this.addEventListener('relation:pick-partner', this.#onPickPartner);
+
     const done = el('button', {
       class: 'primary',
       text: S.relations.done,
@@ -117,7 +128,11 @@ export class RelationEditor extends HTMLElement {
             this.#couple,
             el('p', { class: 'note', text: S.relations.coupleHint }),
           ]),
-          fieldset(S.relations.partners, [this.#partners]),
+          fieldset(S.relations.partners, [
+            this.#partners,
+            el('p', { class: 'note', text: S.relations.addPartnerHint }),
+            this.#partnerSearch,
+          ]),
         ],
       }),
       el('footer', { children: [done] }),
@@ -137,6 +152,13 @@ export class RelationEditor extends HTMLElement {
 
     this.#search.graph = graph;
     this.#search.exclude = descendantIds(graph, this.#personId);
+
+    const excludePartners = new Set(descendantIds(graph, this.#personId));
+    for (const partner of partnersOf(graph, this.#personId)) {
+      excludePartners.add(partner.id);
+    }
+    this.#partnerSearch.graph = graph;
+    this.#partnerSearch.exclude = excludePartners;
 
     this.#renderParents(graph);
     this.#renderCouple(graph);
@@ -318,6 +340,12 @@ export class RelationEditor extends HTMLElement {
     else this.#act('addParentLink', this.#personId, personId);
   };
 
+  #onPickPartner = (event) => {
+    event.stopPropagation();
+    const { personId } = event.detail;
+    this.#act('addUnion', this.#personId, personId);
+  };
+
   /**
    * Asks for a change and repaints.
    *
@@ -328,6 +356,7 @@ export class RelationEditor extends HTMLElement {
   #act(action, ...args) {
     this.#send(action, ...args);
     this.#search.reset();
+    this.#partnerSearch.reset();
     this.#render();
   }
 

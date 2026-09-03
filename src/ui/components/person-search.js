@@ -79,6 +79,10 @@ export class PersonSearch extends HTMLElement {
   }
 
   /** People this search must not offer. Used to keep a lineage acyclic. */
+  get exclude() {
+    return this.#exclude;
+  }
+
   set exclude(ids) {
     this.#exclude = ids ?? null;
   }

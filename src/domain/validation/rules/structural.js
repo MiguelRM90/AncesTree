@@ -7,6 +7,7 @@
 
 import { Severity, issue, subject } from '../issue.js';
 import { isBiological, childLinksOf } from '../../graph/queries.js';
+import { isBefore, Comparison } from '../../date/compare.js';
 
 const E = Severity.ERROR;
 
@@ -163,11 +164,59 @@ function danglingRefs(g) {
   return found;
 }
 
+/** There cannot be two unions linking the same pair of people (unless dates do not overlap). */
+function duplicateUnions(g) {
+  const byPair = new Map();
+  const found = [];
+
+  for (const union of g.unions.values()) {
+    if (!union.partner1Id || !union.partner2Id || union.partner1Id === union.partner2Id) continue;
+    const key =
+      union.partner1Id < union.partner2Id
+        ? `${union.partner1Id}|${union.partner2Id}`
+        : `${union.partner2Id}|${union.partner1Id}`;
+
+    const existing = byPair.get(key);
+    if (!existing) {
+      byPair.set(key, [union]);
+      continue;
+    }
+
+    for (const prev of existing) {
+      const prevEndsBefore =
+        prev.endDate &&
+        union.startDate &&
+        isBefore(prev.endDate, union.startDate) === Comparison.CERTAIN;
+      const unionEndsBefore =
+        union.endDate &&
+        prev.startDate &&
+        isBefore(union.endDate, prev.startDate) === Comparison.CERTAIN;
+
+      if (!prevEndsBefore && !unionEndsBefore) {
+        found.push(
+          issue(
+            'DUPLICATE_UNION',
+            E,
+            [subject('union', prev.id), subject('union', union.id)],
+            'validation.duplicateUnion',
+          ),
+        );
+        break;
+      }
+    }
+    existing.push(union);
+  }
+
+  return found;
+}
+
 export const structuralRules = [
   selfParent,
   selfUnion,
   cycles,
   duplicateEdges,
+  duplicateUnions,
   tooManyBiologicalParents,
   danglingRefs,
 ];
+

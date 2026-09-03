@@ -247,18 +247,36 @@ export function updatePerson(personId, changes) {
 /** Adds a new parent for an existing person, in one mutation. */
 export function addParentFor(childId) {
   const parent = createPerson();
-  const link = createParentChild({ parentId: parent.id, childId });
+  let link = createParentChild({ parentId: parent.id, childId });
 
   const result = store.apply(
-    (p) => ({
-      ...p,
-      persons: [...p.persons, parent],
-      parentChildren: [...p.parentChildren, link],
-    }),
+    (p) => {
+      const existing = p.parentChildren.filter((l) => l.childId === childId);
+      if (existing.length === 1 && existing[0].type === ParentType.BIOLOGICAL) {
+        const firstParentId = existing[0].parentId;
+        const union = createUnion({ partner1Id: firstParentId, partner2Id: parent.id });
+        link = { ...link, unionId: union.id };
+        const updatedParentChildren = p.parentChildren.map((l) =>
+          l.id === existing[0].id ? { ...l, unionId: union.id } : l,
+        );
+        return {
+          ...p,
+          persons: [...p.persons, parent],
+          unions: [...p.unions, union],
+          parentChildren: [...updatedParentChildren, link],
+        };
+      }
+
+      return {
+        ...p,
+        persons: [...p.persons, parent],
+        parentChildren: [...p.parentChildren, link],
+      };
+    },
     { label: 'add parent' },
   );
 
-  return result.ok ? { ...result, person: parent } : result;
+  return result.ok ? { ...result, person: parent, link } : result;
 }
 
 /** Adds a new partner and the union that joins them. */
@@ -327,6 +345,21 @@ export function addChildFor(parentId) {
  * other mutation already gets, and the caller reports the refusal.
  */
 
+/** Links two existing people in a union. */
+export function addUnion(person1Id, person2Id, overrides = {}) {
+  const union = createUnion({ partner1Id: person1Id, partner2Id: person2Id, ...overrides });
+
+  const result = store.apply(
+    (project) => ({
+      ...project,
+      unions: [...project.unions, union],
+    }),
+    { label: 'add union' },
+  );
+
+  return result.ok ? { ...result, union } : result;
+}
+
 /** Type, dates or notes of a union. A marriage that ended has an endDate. */
 export function updateUnion(unionId, changes) {
   return store.apply(
@@ -354,11 +387,48 @@ export function updateParentLink(linkId, changes) {
 }
 
 /** Links an existing person to an existing child. */
-export function addParentLink(childId, parentId, { type = ParentType.BIOLOGICAL } = {}) {
-  const link = createParentChild({ parentId, childId, type });
+export function addParentLink(
+  childId,
+  parentId,
+  { type = ParentType.BIOLOGICAL, createUnion: shouldCreateUnion = true } = {},
+) {
+  let link = createParentChild({ parentId, childId, type });
 
   const result = store.apply(
-    (project) => ({ ...project, parentChildren: [...project.parentChildren, link] }),
+    (project) => {
+      const existing = project.parentChildren.filter((l) => l.childId === childId);
+      if (
+        shouldCreateUnion &&
+        type === ParentType.BIOLOGICAL &&
+        existing.length === 1 &&
+        existing[0].type === ParentType.BIOLOGICAL
+      ) {
+        const firstParentId = existing[0].parentId;
+        let union = project.unions.find(
+          (u) =>
+            (u.partner1Id === firstParentId && u.partner2Id === parentId) ||
+            (u.partner1Id === parentId && u.partner2Id === firstParentId),
+        );
+        let unions = project.unions;
+        if (!union) {
+          union = createUnion({ partner1Id: firstParentId, partner2Id: parentId });
+          unions = [...project.unions, union];
+        }
+
+        link = { ...link, unionId: union.id };
+        const updatedParentChildren = project.parentChildren.map((l) =>
+          l.id === existing[0].id ? { ...l, unionId: union.id } : l,
+        );
+
+        return {
+          ...project,
+          unions,
+          parentChildren: [...updatedParentChildren, link],
+        };
+      }
+
+      return { ...project, parentChildren: [...project.parentChildren, link] };
+    },
     { label: 'add parent' },
   );
 

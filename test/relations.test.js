@@ -14,6 +14,8 @@ import { store } from '../src/store/store.js';
 import * as actions from '../src/store/actions.js';
 import { createBrowserFolder, removeBrowserFolder } from '../src/storage/opfs.js';
 import { person, project, minimalFamily } from './fixtures/families.js';
+import '../src/ui/components/relation-editor.js';
+
 
 /**
  * The relationship edits, tested as the pure project-to-project functions they
@@ -360,4 +362,247 @@ describe('through the store', () => {
 
     expect(store.canUndo).to.equal(before, 'a refusal is not an edit to undo');
   });
+
+  it('automatically creates a union when adding a second biological parent via addParentFor', async () => {
+    const child = person('Child');
+    const father = person('Father');
+    const link = createParentChild({ parentId: father.id, childId: child.id, type: ParentType.BIOLOGICAL });
+    await openWith(project({ persons: [child, father], parentChildren: [link] }));
+
+    const result = actions.addParentFor(child.id);
+    expect(result.ok).to.equal(true);
+
+    const unions = [...store.graph.unions.values()];
+    expect(unions).to.have.lengthOf(1);
+    expect([unions[0].partner1Id, unions[0].partner2Id]).to.have.members([father.id, result.person.id]);
+
+    const links = parentLinksOf(store.graph, child.id);
+    expect(links).to.have.lengthOf(2);
+    expect(links.every((l) => l.unionId === unions[0].id)).to.equal(true);
+  });
+
+  it('automatically creates a union when adding a second biological parent via addParentLink', async () => {
+    const child = person('Child');
+    const father = person('Father');
+    const mother = person('Mother');
+    const link = createParentChild({ parentId: father.id, childId: child.id, type: ParentType.BIOLOGICAL });
+    await openWith(project({ persons: [child, father, mother], parentChildren: [link] }));
+
+    const result = actions.addParentLink(child.id, mother.id);
+    if (!result.ok) console.error('DEBUG_FAIL_1:', JSON.stringify(result));
+    expect(result.ok).to.equal(true);
+
+    const unions = [...store.graph.unions.values()];
+    expect(unions).to.have.lengthOf(1);
+    expect([unions[0].partner1Id, unions[0].partner2Id]).to.have.members([father.id, mother.id]);
+
+    const links = parentLinksOf(store.graph, child.id);
+    expect(links).to.have.lengthOf(2);
+    expect(links.every((l) => l.unionId === unions[0].id)).to.equal(true);
+  });
+
+  it('reuses an existing union and avoids duplicates when adding a second parent', async () => {
+    const child = person('Child');
+    const father = person('Father');
+    const mother = person('Mother');
+    const union = createUnion({ partner1Id: father.id, partner2Id: mother.id });
+    const link = createParentChild({ parentId: father.id, childId: child.id, type: ParentType.BIOLOGICAL });
+    await openWith(
+      project({
+        persons: [child, father, mother],
+        unions: [union],
+        parentChildren: [link],
+      }),
+    );
+
+    const result = actions.addParentLink(child.id, mother.id);
+    expect(result.ok).to.equal(true);
+
+    const unions = [...store.graph.unions.values()];
+    expect(unions).to.have.lengthOf(1, 'no duplicate union is created');
+    expect(unions[0].id).to.equal(union.id);
+
+    const links = parentLinksOf(store.graph, child.id);
+    expect(links).to.have.lengthOf(2);
+    expect(links.every((l) => l.unionId === union.id)).to.equal(true);
+  });
+
+  it('does not create a union when adding the first parent', async () => {
+    const child = person('Child');
+    await openWith(project({ persons: [child] }));
+
+    console.error('DEBUG_FIRST_PARENT: isOpen=', store.isOpen,
+      'personsCount=', store.graph?.persons?.size,
+      'hasChild=', store.graph?.persons?.has(child.id),
+      'parentChildren=', store.graph?.parentChildren?.size,
+      'blocking=', [...(store._blocking ?? [])]);
+    const result = actions.addParentFor(child.id);
+    if (!result.ok) console.error('DEBUG_FAIL_FIRST_PARENT:', JSON.stringify(result));
+    expect(result.ok).to.equal(true);
+
+    expect([...store.graph.unions.values()]).to.have.lengthOf(0);
+    const links = parentLinksOf(store.graph, child.id);
+    expect(links).to.have.lengthOf(1);
+    expect(links[0].unionId).to.equal(null);
+  });
+
+  it('does not create a union when the second parent link is non-biological', async () => {
+    const child = person('Child');
+    const father = person('Father');
+    const guardian = person('Guardian');
+    const link = createParentChild({ parentId: father.id, childId: child.id, type: ParentType.BIOLOGICAL });
+    await openWith(project({ persons: [child, father, guardian], parentChildren: [link] }));
+
+    const result = actions.addParentLink(child.id, guardian.id, { type: ParentType.GUARDIAN });
+    expect(result.ok).to.equal(true);
+
+    expect([...store.graph.unions.values()]).to.have.lengthOf(0);
+    const links = parentLinksOf(store.graph, child.id);
+    expect(links.every((l) => l.unionId === null)).to.equal(true);
+  });
+
+  it('does not create a union if createUnion: false is specified', async () => {
+    const child = person('Child');
+    const father = person('Father');
+    const mother = person('Mother');
+    const link = createParentChild({ parentId: father.id, childId: child.id, type: ParentType.BIOLOGICAL });
+    await openWith(project({ persons: [child, father, mother], parentChildren: [link] }));
+
+    const result = actions.addParentLink(child.id, mother.id, { createUnion: false });
+    expect(result.ok).to.equal(true);
+
+    expect([...store.graph.unions.values()]).to.have.lengthOf(0);
+    const links = parentLinksOf(store.graph, child.id);
+    expect(links.every((l) => l.unionId === null)).to.equal(true);
+  });
+
+  it('creates a union between two existing people via addUnion', async () => {
+    const a = person('A');
+    const b = person('B');
+    await openWith(project({ persons: [a, b] }));
+
+    console.error('DEBUG_STORE: isOpen=', store.isOpen,
+      'personsCount=', store.graph?.persons?.size,
+      'personIds=', store.graph ? [...store.graph.persons.keys()] : 'null',
+      'a.id=', a.id, 'b.id=', b.id,
+      'hasA=', store.graph?.persons?.has(a.id),
+      'hasB=', store.graph?.persons?.has(b.id));
+    const result = actions.addUnion(a.id, b.id, { type: UnionType.MARRIED });
+    if (!result.ok) console.error('DEBUG_FAIL_3:', JSON.stringify(result));
+    expect(result.ok).to.equal(true);
+
+
+    const saved = store.graph.unions.get(result.union.id);
+    expect(saved).to.be.ok;
+    expect(saved.type).to.equal(UnionType.MARRIED);
+  });
+
+  it('refuses to add a duplicate union between the same people', async () => {
+    const a = person('A');
+    const b = person('B');
+    const union = createUnion({ partner1Id: a.id, partner2Id: b.id });
+    await openWith(project({ persons: [a, b], unions: [union] }));
+
+    const result = actions.addUnion(a.id, b.id);
+    expect(result.ok).to.equal(false);
+    expect(result.errors.map((e) => e.ruleId)).to.include('DUPLICATE_UNION');
+  });
+
+  it('refuses to create a union with oneself', async () => {
+    const a = person('A');
+    await openWith(project({ persons: [a] }));
+
+    const result = actions.addUnion(a.id, a.id);
+    expect(result.ok).to.equal(false);
+    expect(result.errors.map((e) => e.ruleId)).to.include('SELF_UNION');
+  });
 });
+
+describe('relation editor UI', () => {
+  let folder = null;
+  let element = null;
+
+  beforeEach(async () => {
+    folder = await createBrowserFolder('RelationEditor UI test');
+    element = document.createElement('relation-editor');
+    document.body.append(element);
+  });
+
+  afterEach(async () => {
+    element.remove();
+    store.close();
+    await removeBrowserFolder(folder.name).catch(() => {});
+  });
+
+  it('excludes self, descendants, and existing partners from partner search', async () => {
+    const focal = person('Focal');
+    const spouse = person('Spouse');
+    const child = person('Child');
+    const grandchild = person('Grandchild');
+    const sibling = person('Sibling');
+    const union = createUnion({ partner1Id: focal.id, partner2Id: spouse.id });
+    const link1 = createParentChild({ parentId: focal.id, childId: child.id, unionId: union.id });
+    const link2 = createParentChild({ parentId: child.id, childId: grandchild.id });
+
+    const data = project({
+      persons: [focal, spouse, child, grandchild, sibling],
+      unions: [union],
+      parentChildren: [link1, link2],
+    });
+    await store.adoptNew(data, folder);
+
+    element.open(focal.id, () => store.graph);
+
+    const searches = element.shadowRoot.querySelectorAll('person-search');
+    const partnerSearch = searches[1];
+    expect(partnerSearch).to.be.ok;
+
+    expect(partnerSearch.exclude.has(focal.id)).to.equal(true);
+    expect(partnerSearch.exclude.has(spouse.id)).to.equal(true);
+    expect(partnerSearch.exclude.has(child.id)).to.equal(true);
+    expect(partnerSearch.exclude.has(grandchild.id)).to.equal(true);
+    expect(partnerSearch.exclude.has(sibling.id)).to.equal(false);
+  });
+
+  it('dispatches addUnion action when a partner is selected', async () => {
+    const focal = person('Focal');
+    const candidate = person('Candidate');
+    const data = project({ persons: [focal, candidate] });
+    await store.adoptNew(data, folder);
+
+    element.open(focal.id, () => store.graph);
+
+    let dispatched = null;
+    element.addEventListener('relation:change', (event) => {
+      dispatched = event.detail;
+    });
+
+    const partnerSearch = element.shadowRoot.querySelectorAll('person-search')[1];
+    partnerSearch.dispatchEvent(
+      new CustomEvent('relation:pick-partner', {
+        detail: { personId: candidate.id },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+
+    expect(dispatched).to.eql({
+      action: 'addUnion',
+      args: [focal.id, candidate.id],
+    });
+  });
+
+  it('resets searches when closed without adding a partner', async () => {
+    const focal = person('Focal');
+    await store.adoptNew(project({ persons: [focal] }), folder);
+
+    element.open(focal.id, () => store.graph);
+    const partnerSearch = element.shadowRoot.querySelectorAll('person-search')[1];
+    const input = partnerSearch.shadowRoot.querySelector('input');
+    input.value = 'query';
+
+    element.close();
+    expect(input.value).to.equal('');
+  });
+});
+

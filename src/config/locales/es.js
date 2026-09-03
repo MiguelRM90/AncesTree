@@ -214,6 +214,8 @@ export const es = {
 
     partners: 'Parejas',
     noPartners: 'No hay parejas registradas.',
+    addPartner: 'Busca una pareja para añadir…',
+    addPartnerHint: 'Se puede añadir a cualquiera que no sea descendiente ni pareja actual.',
     unionType: 'Tipo de relación',
     started: 'Desde',
     ended: 'Hasta',
@@ -279,6 +281,7 @@ export const es = {
     selfUnion: 'Una unión necesita dos personas distintas.',
     cycle: 'Este vínculo crearía un bucle en el árbol.',
     duplicateEdge: 'Este vínculo progenitor-hijo ya existe.',
+    duplicateUnion: 'Estas dos personas ya están unidas por una relación.',
     tooManyBiologicalParents: 'Una persona no puede tener más de dos progenitores biológicos.',
     danglingRef: 'Este registro apunta a algo que ya no existe.',
     deathBeforeBirth: 'La fecha de defunción es anterior a la de nacimiento.',

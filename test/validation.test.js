@@ -54,6 +54,32 @@ describe('structural rules (all ERROR)', () => {
     expect(idsOf(run(data))).to.include('DUPLICATE_EDGE');
   });
 
+  it('flags duplicate unions between the same people', () => {
+    const a = person('A');
+    const b = person('B');
+    const data = project({
+      persons: [a, b],
+      unions: [
+        createUnion({ partner1Id: a.id, partner2Id: b.id }),
+        createUnion({ partner1Id: b.id, partner2Id: a.id }),
+      ],
+    });
+    expect(idsOf(run(data))).to.include('DUPLICATE_UNION');
+  });
+
+  it('allows duplicate unions if dates do not overlap', () => {
+    const a = person('A');
+    const b = person('B');
+    const data = project({
+      persons: [a, b],
+      unions: [
+        createUnion({ partner1Id: a.id, partner2Id: b.id, endDate: parseDate('1940') }),
+        createUnion({ partner1Id: a.id, partner2Id: b.id, startDate: parseDate('1950') }),
+      ],
+    });
+    expect(idsOf(run(data))).to.not.include('DUPLICATE_UNION');
+  });
+
   it('flags more than two biological parents', () => {
     const child = person('C');
     const parents = ['A', 'B', 'C'].map((n) => person(n));

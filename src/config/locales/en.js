@@ -211,6 +211,8 @@ export const en = {
 
     partners: 'Partners',
     noPartners: 'No partners recorded.',
+    addPartner: 'Search for a partner to add…',
+    addPartnerHint: 'Anyone can be added who is not already a descendant or partner.',
     unionType: 'Kind of relationship',
     started: 'From',
     ended: 'Until',
@@ -279,6 +281,7 @@ export const en = {
     selfUnion: 'A union requires two different people.',
     cycle: 'This link would create a loop in the tree.',
     duplicateEdge: 'This parent-child link already exists.',
+    duplicateUnion: 'These two people are already linked by a union.',
     tooManyBiologicalParents: 'A person cannot have more than two biological parents.',
     danglingRef: 'This record points to something that no longer exists.',
     deathBeforeBirth: 'Death date is before the birth date.',
