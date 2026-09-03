@@ -350,10 +350,31 @@ export function addUnion(person1Id, person2Id, overrides = {}) {
   const union = createUnion({ partner1Id: person1Id, partner2Id: person2Id, ...overrides });
 
   const result = store.apply(
-    (project) => ({
-      ...project,
-      unions: [...project.unions, union],
-    }),
+    (project) => {
+      const parentIds = new Set([person1Id, person2Id]);
+      const sharedChildren = new Set();
+      const biologicalByChild = new Map();
+
+      for (const link of project.parentChildren) {
+        if (link.type !== ParentType.BIOLOGICAL || !parentIds.has(link.parentId)) continue;
+        const parents = biologicalByChild.get(link.childId) ?? new Set();
+        parents.add(link.parentId);
+        biologicalByChild.set(link.childId, parents);
+        if (parents.size === parentIds.size) sharedChildren.add(link.childId);
+      }
+
+      return {
+        ...project,
+        unions: [...project.unions, union],
+        parentChildren: project.parentChildren.map((link) =>
+          sharedChildren.has(link.childId) &&
+          link.type === ParentType.BIOLOGICAL &&
+          parentIds.has(link.parentId)
+            ? { ...link, unionId: union.id }
+            : link,
+        ),
+      };
+    },
     { label: 'add union' },
   );
 

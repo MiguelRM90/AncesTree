@@ -497,6 +497,27 @@ describe('through the store', () => {
     expect(saved.type).to.equal(UnionType.MARRIED);
   });
 
+  it('attaches shared biological children when adding an existing partner', async () => {
+    const child = person('Child');
+    const father = person('Father');
+    const mother = person('Mother');
+    const fatherLink = createParentChild({ parentId: father.id, childId: child.id });
+    const motherLink = createParentChild({ parentId: mother.id, childId: child.id });
+    await openWith(
+      project({
+        persons: [child, father, mother],
+        parentChildren: [fatherLink, motherLink],
+      }),
+    );
+
+    const result = actions.addUnion(mother.id, father.id);
+    expect(result.ok).to.equal(true);
+
+    const links = parentLinksOf(store.graph, child.id);
+    expect(links).to.have.lengthOf(2);
+    expect(links.every((link) => link.unionId === result.union.id)).to.equal(true);
+  });
+
   it('refuses to add a duplicate union between the same people', async () => {
     const a = person('A');
     const b = person('B');
