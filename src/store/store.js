@@ -232,10 +232,13 @@ class Store extends EventTarget {
 
   async save() {
     if (!this.#project || !this.#dirHandle || this.#saving) return;
+    const project = this.#project;
+    const dirHandle = this.#dirHandle;
     this.#saving = true;
     this.#emit('saving');
     try {
-      this.#project = await writeProject(this.#dirHandle, this.#project);
+      const saved = await writeProject(dirHandle, project);
+      if (this.#project === project && this.#dirHandle === dirHandle) this.#project = saved;
       this.#emit('saved');
     } catch (error) {
       this.#emit('save-error', { error });

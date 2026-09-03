@@ -389,7 +389,6 @@ describe('through the store', () => {
     await openWith(project({ persons: [child, father, mother], parentChildren: [link] }));
 
     const result = actions.addParentLink(child.id, mother.id);
-    if (!result.ok) console.error('DEBUG_FAIL_1:', JSON.stringify(result));
     expect(result.ok).to.equal(true);
 
     const unions = [...store.graph.unions.values()];
@@ -431,13 +430,7 @@ describe('through the store', () => {
     const child = person('Child');
     await openWith(project({ persons: [child] }));
 
-    console.error('DEBUG_FIRST_PARENT: isOpen=', store.isOpen,
-      'personsCount=', store.graph?.persons?.size,
-      'hasChild=', store.graph?.persons?.has(child.id),
-      'parentChildren=', store.graph?.parentChildren?.size,
-      'blocking=', [...(store._blocking ?? [])]);
     const result = actions.addParentFor(child.id);
-    if (!result.ok) console.error('DEBUG_FAIL_FIRST_PARENT:', JSON.stringify(result));
     expect(result.ok).to.equal(true);
 
     expect([...store.graph.unions.values()]).to.have.lengthOf(0);
@@ -481,16 +474,8 @@ describe('through the store', () => {
     const b = person('B');
     await openWith(project({ persons: [a, b] }));
 
-    console.error('DEBUG_STORE: isOpen=', store.isOpen,
-      'personsCount=', store.graph?.persons?.size,
-      'personIds=', store.graph ? [...store.graph.persons.keys()] : 'null',
-      'a.id=', a.id, 'b.id=', b.id,
-      'hasA=', store.graph?.persons?.has(a.id),
-      'hasB=', store.graph?.persons?.has(b.id));
     const result = actions.addUnion(a.id, b.id, { type: UnionType.MARRIED });
-    if (!result.ok) console.error('DEBUG_FAIL_3:', JSON.stringify(result));
     expect(result.ok).to.equal(true);
-
 
     const saved = store.graph.unions.get(result.union.id);
     expect(saved).to.be.ok;
